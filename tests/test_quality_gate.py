@@ -8,11 +8,31 @@ from src.schema import MIN_STEPS
 
 
 def test_diagnostic_problems_all_have_full_solutions():
-    assert len(DIAGNOSTIC_PROBLEMS) == 32
+    from src.diagnostic_bank import DIAGNOSTIC_SETS, SET_ORDER, set_by_id
+    from src.load import problems_for_stage
+
+    assert len(DIAGNOSTIC_PROBLEMS) == 68
+    ids = [problem.id for problem in DIAGNOSTIC_PROBLEMS]
+    assert len(ids) == len(set(ids))
     for problem in DIAGNOSTIC_PROBLEMS:
         problem.validate()
         assert len(problem.steps) >= MIN_STEPS
         assert problem.stage in (1, 2, 3, 4)
+        assert skill_by_id(problem.skill_id) is not None
+    assert SET_ORDER == ("placement", "midway", "end", "anytime")
+    assert set(DIAGNOSTIC_SETS) == set(SET_ORDER)
+    placement = set_by_id("placement")
+    assert placement.n_per_stage == 8
+    assert len(placement.problems) == 32
+    for set_id in ("midway", "end", "anytime"):
+        dset = set_by_id(set_id)
+        assert dset.n_per_stage == 3
+        assert len(dset.problems) == 12
+        for stage in (1, 2, 3, 4):
+            assert len(dset.problems_for_stage(stage)) == 3
+    assert len(problems_for_stage(1)) == 8
+    assert len(problems_for_stage(1, "midway")) == 3
+    assert problems_for_stage(2, "end")[0].id.startswith("diag-e-2")
 
 
 def test_every_skill_has_a_generator():
@@ -137,6 +157,9 @@ def test_inverse_trig_prompt_says_inverse_not_forward():
     for seed in range(50):
         problem = generate_problem("inverse_trig", skill_id="trig-8-3", seed=seed)
         assert r"\arccos" in problem.prompt or r"\arcsin" in problem.prompt or r"\arctan" in problem.prompt
+        assert r"\sin^{-1}" in problem.prompt or r"\cos^{-1}" in problem.prompt or r"\tan^{-1}" in problem.prompt
+        assert "**Domain:**" in problem.prompt
+        assert "**Range:**" in problem.prompt
         assert r"\ccos" not in problem.prompt
         assert "not cosine" in problem.prompt or "not sine" in problem.prompt or "not tangent" in problem.prompt
         assert any("arccos" in m.lower() or "inverse" in m.lower() for m in problem.common_mistakes)
@@ -213,6 +236,94 @@ def test_trig_identities_catalog_and_drill():
     pyth = identities_practice_html(field="math", family="pythagorean")
     assert "sin²(θ) + cos²(θ)" in pyth
     assert pyth.count('data-id="pyth-1"') == 2
+    by_id = {item.id: item for item in IDENTITIES}
+    for required in (
+        "rec-sin",
+        "rec-cos",
+        "rec-tan",
+        "per-cot",
+        "per-cot-w",
+        "inv-alias-sin",
+        "inv-dom-sin",
+        "inv-dom-cos",
+        "inv-dom-tan",
+        "inv-def-sin",
+        "tri-cos-a",
+        "tri-cos-b",
+        "tri-cos-c",
+        "tri-tan-ab",
+        "tri-tan-bc",
+        "tri-tan-ac",
+        "tri-mollweide",
+    ):
+        assert required in by_id, required
+    assert by_id["rec-sin"].answer == "1 / csc(θ)"
+    assert by_id["per-cot"].answer == "cot(θ)"
+    assert by_id["inv-def-sin"].answer == "x = sin(y)"
+    assert by_id["inv-dom-sin"].answer == "−1 ≤ x ≤ 1"
+    assert by_id["inv-sin-rng"].answer == "−π/2 ≤ y ≤ π/2"
+    assert by_id["inv-cos-rng"].answer == "0 ≤ y ≤ π"
+    assert by_id["inv-dom-tan"].answer == "−∞ < x < ∞"
+    assert by_id["inv-tan-rng"].answer == "−π/2 < y < π/2"
+    assert by_id["inv-cos"].answer == "x"
+    assert by_id["inv-acos-cos"].answer == "θ"
+    assert by_id["inv-alias-sin"].answer == "arcsin(x)"
+    assert by_id["inv-def-sin"].labeled_markdown() == r"$y=\sin^{-1}(x)$ is equivalent to $x=\sin(y)$"
+    assert "Domain" in by_id["inv-dom-sin"].labeled_markdown()
+    assert r"-1\le x\le 1" in by_id["inv-dom-sin"].labeled_markdown()
+    assert "sin(γ)/c" in by_id["tri-sines"].answer
+    assert "2bc cos" in by_id["tri-cos-a"].answer
+    math_html = identities_practice_html(field="math")
+    assert "y = sin⁻¹(x) is equivalent to" in math_html
+    assert "sin⁻¹(x) = arcsin(x)" in math_html
+    assert "−1 ≤ x ≤ 1" in math_html
+    assert "Mollweide" in math_html
+    assert "Cotangent period" in math_html
+
+
+def test_flashcards_cover_formulas_and_identities():
+    from src.flashcards import (
+        FAMILY_ORDER,
+        FORMULAS,
+        all_flashcards,
+        flashcards_for,
+    )
+    from src.identities import FIELD_ORDER, IDENTITIES
+
+    cards = all_flashcards()
+    ids = [card.id for card in cards]
+    assert len(ids) == len(set(ids))
+    assert len(FORMULAS) >= 40
+    assert len(cards) == len(FORMULAS) + len(IDENTITIES)
+    allowed = set(FIELD_ORDER)
+    for card in cards:
+        assert card.fields
+        assert set(card.fields) <= allowed
+        assert card.family in FAMILY_ORDER
+        assert card.name.strip()
+        assert card.front.strip()
+        assert card.back_tex.strip()
+        assert len(card.why) >= 20
+    by_id = {card.id: card for card in cards}
+    assert "alg-slope-int" in by_id
+    assert "y = mx + b" in by_id["alg-slope-int"].back_tex
+    assert "kin-g" in by_id
+    assert r"10\,\mathrm{m/s^2}" in by_id["kin-g"].back_tex
+    assert "id-rec-sin" in by_id
+    assert by_id["id-rec-sin"].back_tex == r"1/\csc\theta"
+    assert "id-per-cot" in by_id
+    assert "id-inv-alias-sin" in by_id
+    assert "id-tri-cos-c" in by_id
+    assert "id-tri-mollweide" in by_id
+    assert "fn-cot-period" in by_id
+    assert flashcards_for(field="math")
+    assert flashcards_for(field="physics")
+    assert flashcards_for(field="ee")
+    assert flashcards_for(field="me")
+    assert len(flashcards_for(family="trig")) == len(IDENTITIES)
+    assert all("math" in c.fields or "physics" in c.fields for c in flashcards_for(field="physics"))
+    empty = flashcards_for(field="ee", family="fluids")
+    assert empty == ()
 
 
 def test_physics_course_is_algebra_based_ap_level():

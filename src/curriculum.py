@@ -897,7 +897,7 @@ COURSES: list[Course] = [
                     _s("trig-7-1", "Angles (degrees and radians)", _alg_lesson("π radians = 180°. Calculus uses radians.", "Degrees to radians: multiply by π/180 and reduce. Radians to degrees: multiply by 180/π.", "Using 180/π when converting to radians, or leaving an unreduced fraction like 150π/180."), "7-1-angles", AP3, "ready", "deg_to_rad", "trig"),
                     _s("trig-7-2", "Right triangle trigonometry", _alg_lesson("SOH-CAH-TOA names the three primary ratios.", "Sine = opp/hyp, cosine = adj/hyp, tangent = opp/adj.", "Swapping opposite and adjacent."), "7-2-right-triangle-trigonometry", AP3, "ready", "right_triangle", "trig"),
                     _s("trig-7-3", "The unit circle", _alg_lesson("On the unit circle, cosine is x and sine is y. Memorize the 0-30-45-60-90 family and quadrant signs.", "Find the reference angle, take the chart value, then attach the ASTC sign.", "A correct absolute value with the wrong quadrant sign."), "7-3-unit-circle", AP3, "ready", "unit_circle", "trig"),
-                    _s("trig-7-4", "The other trigonometric functions", _alg_lesson("tan = sin/cos, cot = cos/sin, sec = 1/cos, csc = 1/sin.", "Build them from unit-circle sine and cosine rather than a new chart.", "Dividing in the wrong order, or using a reciprocal of the wrong function."), "7-4-the-other-trigonometric-functions", AP3, "ready", "other_trig", "trig"),
+                    _s("trig-7-4", "The other trigonometric functions", _alg_lesson("Both directions of each pair: tan = sin/cos = 1/cot, cot = cos/sin = 1/tan, sec = 1/cos and cos = 1/sec, csc = 1/sin and sin = 1/csc.", "Build them from unit-circle sine and cosine rather than a new chart. On the unit circle, tan = y/x, cot = x/y, sec = 1/x, csc = 1/y.", "Dividing in the wrong order, or using a reciprocal of the wrong function (csc is 1/sin, not 1/cos)."), "7-4-the-other-trigonometric-functions", AP3, "ready", "other_trig", "trig"),
                     _s("trig-7-5", "Arc length and area of a sector", _alg_lesson("θ must be in radians: arc length s = rθ and sector area A = (1/2) r² θ.", "Convert to radians first if the angle is in degrees, then multiply.", "Using the degree measure of θ in s = rθ, which is off by a factor of π/180."), "7-1-angles", AP3, "ready", "arc_length", "trig"),
                     _s("trig-7-6", "Coterminal angles", _alg_lesson("Coterminal angles share a terminal side. You get them by adding or subtracting full turns (360° or 2π).", "Add or subtract 360° (or 2π) until the angle sits in the requested interval, usually [0, 360) or [0, 2π).", "Stopping at a negative angle when the question asked for the coterminal angle in [0, 360)."), "7-1-angles", AP3, "ready", "coterminal", "trig"),
                     _s("trig-7-7", "Linear and angular speed", _alg_lesson("Angular speed ω is radians per unit time. Linear speed along the rim is v = rω.", "ω = θ/t with θ in radians. Then v = rω if you need distance per time along the circle.", "Mixing revolutions with radians, or using v = rθ instead of v = rω."), "7-1-angles", AP3, "ready", "angular_speed", "trig"),
@@ -910,8 +910,8 @@ COURSES: list[Course] = [
                 title="2. Periodic functions",
                 skills=[
                     _s("trig-8-1", "Graphs of sine and cosine", _alg_lesson("Amplitude is |A|; period of sin(bx) is 2π/|b|.", "Read A and b from y = A sin(bx + φ) + k. Midline is y = k.", "Using 2π·b for the period, or treating amplitude as signed."), "8-1-graphs-of-the-sine-and-cosine-functions", AP3, "ready", "period_amp", "trig"),
-                    _s("trig-8-2", "Graphs of the other trig functions", _alg_lesson("Tangent has period π and vertical asymptotes where cosine is 0.", "Period of tan(bx) is π/|b|, not 2π/|b|.", "Graphing tan as a sine wave with amplitude 1."), "8-2-graphs-of-the-other-trigonometric-functions", AP3, "ready", "tan_period", "trig"),
-                    _s("trig-8-3", "Inverse trigonometric functions", _alg_lesson("arcsin(x) means “the angle whose sine is x.” It is not 1/sin x, and it is not sin(x). Same idea for arccos and arctan. Each inverse returns one principal angle, not every angle with that trig value.", "Ask: which unique angle in the allowed range has this sine/cosine/tangent? arcsin and arctan use [-π/2, π/2] (right half of the unit circle, including the y-axis). arccos uses [0, π] (upper half, including the x-axis). Example: arccos(0) is π/2, not 0, because cos(π/2) = 0 while cos(0) = 1.", "Evaluating cos(0) when the question is arccos(0). Also picking 3π/2 for arccos(0) because cosine is 0 there too — 3π/2 is outside [0, π], so arccos will not choose it."), "8-3-inverse-trigonometric-functions", AP3, "ready", "inverse_trig", "trig"),
+                    _s("trig-8-2", "Graphs of the other trig functions", _alg_lesson("Tangent and cotangent both have period π: tan(θ + πn) = tan(θ) and cot(θ + πn) = cot(θ). Vertical asymptotes where the denominator is 0 (cos = 0 for tan, sin = 0 for cot).", "Period of tan(bx) or cot(bx) is π/|b|, not 2π/|b|. Sine, cosine, secant, and cosecant use 2π/|b|.", "Graphing tan as a sine wave with amplitude 1, or using the sine period 2π on cotangent."), "8-2-graphs-of-the-other-trigonometric-functions", AP3, "ready", "tan_period", "trig"),
+                    _s("trig-8-3", "Inverse trigonometric functions", _alg_lesson("Paul’s Inverse Trig Functions, copied exactly. Definition: y = sin⁻¹(x) is equivalent to x = sin(y); y = cos⁻¹(x) is equivalent to x = cos(y); y = tan⁻¹(x) is equivalent to x = tan(y). Domain and Range — Function y = sin⁻¹(x), Domain −1 ≤ x ≤ 1, Range −π/2 ≤ y ≤ π/2; Function y = cos⁻¹(x), Domain −1 ≤ x ≤ 1, Range 0 ≤ y ≤ π; Function y = tan⁻¹(x), Domain −∞ < x < ∞, Range −π/2 < y < π/2. Inverse properties: cos(cos⁻¹(x)) = x, cos⁻¹(cos(θ)) = θ, sin(sin⁻¹(x)) = x, sin⁻¹(sin(θ)) = θ, tan(tan⁻¹(x)) = x, tan⁻¹(tan(θ)) = θ. Alternate notation: sin⁻¹(x) = arcsin(x), cos⁻¹(x) = arccos(x), tan⁻¹(x) = arctan(x).", "Ask which unique y in that function’s range has this sine, cosine, or tangent. Example: cos⁻¹(0) is π/2, not 0, because cos(π/2) = 0 while cos(0) = 1.", "Reading sin⁻¹(x) as 1/sin(x). Also picking 3π/2 for cos⁻¹(0) because cosine is 0 there too — 3π/2 is outside 0 ≤ y ≤ π, so cos⁻¹ will not choose it."), "8-3-inverse-trigonometric-functions", AP3, "ready", "inverse_trig", "trig"),
                     _s("trig-8-4", "Phase shift and midline", _alg_lesson("y = A sin(b(x − h)) + k is shifted right by h and up by k. The midline is y = k.", "Factor b out of the angle if needed so the shift is the number subtracted from x, not from bx.", "Calling the phase shift φ when the form is sin(bx − φ). The actual x-shift is φ/b."), "8-1-graphs-of-the-sine-and-cosine-functions", AP3, "ready", "phase_shift", "trig"),
                     _s("trig-8-5", "Modeling with sinusoids", _alg_lesson("A cosine or sine of time is simple harmonic motion and also an AC waveform: y = A cos(2π f t) + k.", "Period T = 2π/|ω| if the inside is ωt. Frequency f = 1/T (cycles per unit time).", "Using 2π/T as the period instead of T, or mixing frequency with angular frequency ω = 2πf."), "8-1-graphs-of-the-sine-and-cosine-functions", AP3, "ready", "sinusoid_model", "trig"),
                 ],
@@ -932,9 +932,9 @@ COURSES: list[Course] = [
                 id="trig-ch10",
                 title="4. Further applications",
                 skills=[
-                    _s("trig-10-1", "Law of Sines", _alg_lesson("a/sin A = b/sin B = c/sin C. Two angles already determine the third.", "If you know two angles, use 180° first. Then Law of Sines for a missing side.", "SSA (the ambiguous case) can produce 0, 1, or 2 triangles."), "10-1-non-right-triangles-law-of-sines", AP3, "ready", "law_sines", "trig"),
-                    _s("trig-10-2", "Law of Cosines", _alg_lesson("c² = a² + b² − 2ab cos C. Pythagoras is the right-angle special case.", "Use SAS or SSS. If C = 90°, the cosine term vanishes.", "Using Law of Sines when you have two sides and the included angle (that's SAS, so use cosines)."), "10-2-non-right-triangles-law-of-cosines", AP3, "ready", "law_cosines", "trig"),
-                    _s("trig-10-3", "Area of a triangle", _alg_lesson("Area = (1/2) ab sin C, using the included angle between sides a and b.", "If C = 90°, this is the usual (1/2) base × height. Otherwise keep the sine of the included angle.", "Using the non-included angle, or dropping the 1/2."), "10-1-non-right-triangles-law-of-sines", AP3, "ready", "triangle_area", "trig"),
+                    _s("trig-10-1", "Law of Sines", _alg_lesson("The full three-way form is sin(α)/a = sin(β)/b = sin(γ)/c, same as a/sin A = b/sin B = c/sin C. Two angles already determine the third.", "If you know two angles, use 180° first. Then Law of Sines for a missing side.", "SSA (the ambiguous case) can produce 0, 1, or 2 triangles."), "10-1-non-right-triangles-law-of-sines", AP3, "ready", "law_sines", "trig"),
+                    _s("trig-10-2", "Law of Cosines", _alg_lesson("All three cyclic forms: a² = b² + c² − 2bc cos α, b² = a² + c² − 2ac cos β, c² = a² + b² − 2ab cos γ. Pythagoras is the right-angle special case (the cosine term vanishes).", "Use SAS or SSS. Pick the form whose left side is the side you want, opposite the known included angle.", "Using Law of Sines when you have two sides and the included angle (that's SAS, so use cosines)."), "10-2-non-right-triangles-law-of-cosines", AP3, "ready", "law_cosines", "trig"),
+                    _s("trig-10-3", "Area of a triangle", _alg_lesson("Area = (1/2) ab sin C, using the included angle between sides a and b. The same cheat sheet also lists Law of Tangents, (a−b)/(a+b) = tan(½(α−β))/tan(½(α+β)) and the two cyclic companions on (b,c) and (a,c), plus Mollweide’s formula (a+b)/c = cos(½(α−β))/sin(½ γ).", "If C = 90°, area is the usual (1/2) base × height. Otherwise keep the sine of the included angle. Tangents and Mollweide are check identities after you solve a triangle.", "Using the non-included angle, or dropping the 1/2."), "10-1-non-right-triangles-law-of-sines", AP3, "ready", "triangle_area", "trig"),
                     _s("trig-10-4", "Ambiguous case (SSA)", _alg_lesson("SSA is the only triangle setup that can give 0, 1, or 2 triangles. Compare side a with height h = b sin A.", "If a < h: none. If a = h: one right triangle. If h < a < b and A is acute: two. If a ≥ b: one.", "Assuming SSA always makes a unique triangle the way ASA and SAS do."), "10-1-non-right-triangles-law-of-sines", AP3, "ready", "ssa_ambiguous", "trig"),
                 ],
             ),
@@ -1578,7 +1578,7 @@ RELEVANCE: dict[str, tuple[tuple[str, ...], str]] = {
     ),
     "trig-7-4": (
         ("calc", "ee"),
-        "tan and sec show up in derivatives; tan is also the ratio on a phasor or impedance triangle.",
+        "tan and sec show up in derivatives; tan is also the ratio on a phasor or impedance triangle. The other reciprocal direction is sin = 1/csc, cos = 1/sec, tan = 1/cot.",
     ),
     "trig-7-5": (
         ("calc", "ee", "me"),
@@ -1606,11 +1606,11 @@ RELEVANCE: dict[str, tuple[tuple[str, ...], str]] = {
     ),
     "trig-8-2": (
         ("calc",),
-        "Tangent's asymptotes are the first trig graphs with discontinuities, which calculus will ask about.",
+        "Tangent and cotangent both have period π. Their asymptotes are the first trig graphs with discontinuities, which calculus will ask about.",
     ),
     "trig-8-3": (
         ("calc", "ee", "me"),
-        "arctan shows up in integrals and as the angle of a resultant or of a complex number.",
+        "Paul: y = sin⁻¹(x) is equivalent to x = sin(y); alternate notation sin⁻¹(x) = arcsin(x), not 1/sin. arctan shows up in integrals and as the angle of a resultant or of a complex number.",
     ),
     "trig-8-4": (
         ("calc", "ee", "me"),
@@ -1650,7 +1650,7 @@ RELEVANCE: dict[str, tuple[tuple[str, ...], str]] = {
     ),
     "trig-10-2": (
         ("me",),
-        "Law of Cosines is the magnitude of a resultant of two vectors that are not perpendicular.",
+        "Law of Cosines (all three cyclic forms) is the magnitude of a resultant of two vectors that are not perpendicular.",
     ),
     "trig-10-3": (
         ("me",),

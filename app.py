@@ -21,11 +21,17 @@ from src.curriculum import (
 )
 from src.generate import ensure_all_generators
 from src.load import (
-    PASS_RATIO,
     STAGES,
     generate_for_skill,
     problems_for_stage,
     recommend,
+)
+from src.diagnostic_bank import SET_ORDER, set_by_id  # four diagnostic forms
+from src.flashcards import (
+    FAMILY_LABEL as CARD_FAMILY_LABEL,
+    FAMILY_ORDER as CARD_FAMILY_ORDER,
+    flashcards_for,
+    shuffled_ids,
 )
 from src.identities import (
     FAMILY_LABEL,
@@ -40,7 +46,7 @@ from src.plots import (
     unit_circle_practice_html,
     unit_circle_value_table,
 )
-from src.progress import empty_progress, record_attempt, to_json
+from src.progress import empty_progress, record_attempt, record_diagnostic, to_json
 from src.schema import Problem
 
 ensure_all_generators()
@@ -51,12 +57,10 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-if "progress" not in st.session_state:
-    st.session_state.progress = empty_progress()
-if "page" not in st.session_state:
-    st.session_state.page = "Home"
-if "diag" not in st.session_state:
-    st.session_state.diag = {
+
+def _empty_diag() -> dict:
+    return {
+        "set_id": None,
         "stage": 1,
         "index": 0,
         "results": {},
@@ -65,6 +69,18 @@ if "diag" not in st.session_state:
         "awaiting": True,
         "last_correct": None,
     }
+
+
+if "progress" not in st.session_state:
+    st.session_state.progress = empty_progress()
+if "page" not in st.session_state:
+    st.session_state.page = "Home"
+elif st.session_state.page == "Flashcards":
+    st.session_state.page = "Formula flashcards"
+if st.session_state.get("main-nav") == "Flashcards":
+    st.session_state["main-nav"] = "Formula flashcards"
+if "diag" not in st.session_state:
+    st.session_state.diag = _empty_diag()
 if "study" not in st.session_state:
     st.session_state.study = {
         "course": "precalc",
@@ -102,6 +118,7 @@ PAGES = [
     "Physics",
     "Unit circle",
     "Identities",
+    "Formula flashcards",
     "Extra practice",
     "Progress",
 ]
@@ -217,18 +234,15 @@ def _go(name: str) -> None:
     st.session_state["main-nav"] = name
 
 
-def _start_diagnostic() -> None:
+def _start_diagnostic(set_id: str = "placement") -> None:
     st.session_state.page = "Diagnostic"
     st.session_state["main-nav"] = "Diagnostic"
-    st.session_state.diag = {
-        "stage": 1,
-        "index": 0,
-        "results": {},
-        "finished": False,
-        "recommendation": None,
-        "awaiting": True,
-        "last_correct": None,
-    }
+    st.session_state.diag = _empty_diag()
+    st.session_state.diag["set_id"] = set_id
+
+
+def _abandon_diagnostic() -> None:
+    st.session_state.diag = _empty_diag()
 
 
 def _go_recommended() -> None:
@@ -291,9 +305,6 @@ def problem_card(problem: Problem, key_prefix: str, on_check, skill=None) -> Non
     if skill is not None:
         show_skill_lesson(skill, openstax=True)
     st.markdown(problem.prompt)
-    fig = figure_for(problem.plot, problem.plot_data)
-    if fig is not None:
-        st.pyplot(fig, clear_figure=True, width="stretch")
     if problem.steps:
         st.info(
             f"**How to start this problem — {problem.steps[0].title}.** "
@@ -317,6 +328,9 @@ def problem_card(problem: Problem, key_prefix: str, on_check, skill=None) -> Non
             key=f"{key_prefix}-sol",
             use_container_width=True,
         )
+    fig = figure_for(problem.plot, problem.plot_data)
+    if fig is not None:
+        st.pyplot(fig, clear_figure=True, width="stretch")
     if show_hint:
         st.info(problem.hint)
     if show_sol:
@@ -339,8 +353,10 @@ The diagnostic is a **placement test**, not a grade. It looks for the
 *earliest* gap so you do not waste weeks redoing algebra you still have,
 and so you do not jump into trig while factoring is still shaky.
 
-1. **Four stages, eight questions each**, shown one at a time. Type an
-   answer; you can request a hint or a full solution after you try.
+1. **Four stages.** The full **Placement** form has eight questions per stage.
+   Three shorter retake forms (**Midway check**, **End of studies**, **Anytime
+   retake**) have three new questions per stage, so a later take is not the
+   same test again.
 2. **Stage 1 — Algebra foundations.** Order of operations, exponents,
    radicals, factoring, rational expressions, linear and quadratic
    equations, inequalities. If this stage is weak, stop here.
@@ -353,10 +369,13 @@ and so you do not jump into trig while factoring is still shaky.
 5. **Stage 4 — Precalculus extras.** Systems, conics, polar coordinates,
    sequences, binomial theorem, a limit, vectors, matrices.
 
-You need about **70% on a stage to unlock the next one**. Below that, the
-app **stops** and places you at the first missed skill in that stage.
-Passing a stage still records every miss, so one rusty topic does not
-disappear.
+You need about **70% on a Placement stage** (or **2 of 3** on a retake
+form) to unlock the next one. Below that, the app **stops** and places
+you at the first missed skill in that stage. Passing a stage still
+records every miss, so one rusty topic does not disappear.
+
+Take Placement first. Retake with a different form midway, at the end
+of your studies, or anytime — including another start-of-studies pass.
 
 There is no AP Algebra or AP Trigonometry exam. After you rebuild these
 three courses, the credit exams are **CLEP College Algebra**, **CLEP
@@ -364,9 +383,10 @@ Precalculus**, and **AP Precalculus**.
 """
     )
     st.button(
-        "Start the diagnostic",
+        "Open the diagnostic — placement or a retake form",
         type="primary",
-        on_click=_start_diagnostic,
+        on_click=_go,
+        args=("Diagnostic",),
         use_container_width=True,
     )
     st.subheader("Study without the test")
@@ -406,6 +426,12 @@ Precalculus**, and **AP Precalculus**.
         use_container_width=True,
     )
     st.button(
+        "Formula flashcards — Math, Physics, EE, or ME",
+        on_click=_go,
+        args=("Formula flashcards",),
+        use_container_width=True,
+    )
+    st.button(
         "Open Extra practice — mixed drill with answers",
         on_click=_go,
         args=("Extra practice",),
@@ -413,14 +439,63 @@ Precalculus**, and **AP Precalculus**.
     )
 
 
+def _diag_history_lines() -> None:
+    history = st.session_state.progress.get("diagnostic_history") or []
+    if not history:
+        return
+    st.markdown("**Previous takes in this session**")
+    for rec in reversed(history):
+        title = rec.get("set_title") or rec.get("set_id") or "Placement"
+        start = rec.get("start_title") or "—"
+        scores = rec.get("stage_scores") or {}
+        bits = ", ".join(
+            f"S{stage} {int(ratio * 100)}%" for stage, ratio in scores.items()
+        )
+        st.caption(f"{title}: placed at {start}" + (f" · {bits}" if bits else ""))
+
+
+def _save_diagnostic(diag: dict, rec: dict) -> None:
+    dset = set_by_id(diag.get("set_id"))
+    rec = {**rec, "set_id": dset.id, "set_title": dset.title}
+    diag["finished"] = True
+    diag["recommendation"] = rec
+    record_diagnostic(st.session_state.progress, rec)
+    st.session_state.diag = diag
+
+
 def page_diagnostic() -> None:
     st.title("Placement diagnostic")
     diag = st.session_state.diag
+    if not diag.get("set_id") and not diag.get("finished"):
+        st.markdown(
+            "Four independent forms, same four stages. **Placement** is the full "
+            "32-question test. The other three each have **three new questions per "
+            "stage**, so you can check in midway, at the end of your studies, or "
+            "anytime without repeating the same items."
+        )
+        _diag_history_lines()
+        for set_id in SET_ORDER:
+            dset = set_by_id(set_id)
+            st.subheader(dset.title)
+            st.caption(dset.when)
+            st.markdown(dset.blurb)
+            st.button(
+                f"Start {dset.title} — {dset.n_per_stage} questions per stage",
+                key=f"diag-start-{set_id}",
+                type="primary" if set_id == "placement" else "secondary",
+                on_click=_start_diagnostic,
+                args=(set_id,),
+                use_container_width=True,
+            )
+        return
+
+    dset = set_by_id(diag.get("set_id"))
+    pass_ratio = dset.pass_ratio
 
     if diag["finished"] and diag["recommendation"]:
         rec = diag["recommendation"]
         st.success(rec["headline"])
-        skill = skill_by_id(rec["start_skill_id"])
+        st.caption(f"Form: **{dset.title}** · {dset.when}")
         st.markdown(f"**Recommended start:** {rec['start_title']}")
         scores = rec["stage_scores"]
         if scores:
@@ -439,19 +514,23 @@ def page_diagnostic() -> None:
             on_click=_go_recommended,
             use_container_width=True,
         )
+        _diag_history_lines()
         st.button(
-            "Retake diagnostic",
-            on_click=_start_diagnostic,
+            "Choose another form",
+            on_click=_abandon_diagnostic,
             use_container_width=True,
         )
         return
 
     stage = diag["stage"]
-    items = problems_for_stage(stage)
+    items = problems_for_stage(stage, dset.id)
     index = diag["index"]
     meta = next(s for s in STAGES if s["stage"] == stage)
-    st.progress((stage - 1) / 4, text=f"Stage {stage} of 4 — {meta['title']}")
-    st.caption(meta["why"])
+    st.progress((stage - 1) / 4, text=f"{dset.title} · Stage {stage} of 4 — {meta['title']}")
+    st.caption(
+        f"{meta['why']} Need {int(pass_ratio * 100)}% on this stage to continue "
+        f"({dset.n_per_stage} questions here)."
+    )
     if index >= len(items):
         st.stop()
     problem = items[index]
@@ -470,7 +549,12 @@ def page_diagnostic() -> None:
         st.session_state.diag = diag
 
     if diag["awaiting"]:
-        problem_card(problem, f"diag-{stage}-{index}", on_check, skill=diag_skill)
+        problem_card(problem, f"diag-{dset.id}-{stage}-{index}", on_check, skill=diag_skill)
+        st.button(
+            "Abandon and pick another form",
+            on_click=_abandon_diagnostic,
+            use_container_width=True,
+        )
     else:
         if diag["last_correct"]:
             st.success("Correct.")
@@ -487,7 +571,7 @@ def page_diagnostic() -> None:
             else:
                 marks = [ok for _, ok in diag["results"].get(stage, [])]
                 ratio = (sum(marks) / len(marks)) if marks else 0
-                passed = ratio >= PASS_RATIO
+                passed = ratio >= pass_ratio
                 if passed and stage < 4:
                     diag["stage"] = stage + 1
                     diag["index"] = 0
@@ -497,10 +581,8 @@ def page_diagnostic() -> None:
                         f"Stage {stage} score {int(ratio*100)}% — continuing to stage {stage + 1}."
                     )
                 else:
-                    rec = recommend(diag["results"])
-                    diag["finished"] = True
-                    diag["recommendation"] = rec
-                    st.session_state.progress["diagnostic"] = rec
+                    rec = recommend(diag["results"], pass_ratio=pass_ratio)
+                    _save_diagnostic(diag, rec)
             st.session_state.diag = diag
             st.rerun()
 
@@ -798,15 +880,125 @@ def page_physics() -> None:
         st.rerun()
 
 
+def page_flashcards() -> None:
+    st.title("Formula flashcards")
+    st.markdown(
+        "Memorize **formulas** and **trig identities** the same way you filter practice: "
+        "**Math**, **Physics**, **EE**, or **ME**. Tap **Flip** after you try to recall the "
+        "right-hand side. Graphs are not on these cards — just the equation."
+    )
+    st.caption(
+        "Trig identity cards are the same catalog as the Identities tab "
+        "(Paul’s cheat sheet plus Euler and components), including both reciprocal directions, "
+        "cot period, inverse trig copied from Paul’s Inverse Trig Functions "
+        "(definition, domain/range inequalities, inverse properties, alternate notation "
+        "sin⁻¹(x) = arcsin(x)), and all triangle laws. "
+        "Algebra, precalc, and algebra-based Physics 1 & 2 formulas sit in the other families. "
+        "In-app physics always uses $g = 10\\,\\mathrm{m/s^2}$ when gravity appears."
+    )
+    field_label = st.pills(
+        "Field",
+        ["All fields", "Math", "Physics", "EE", "ME"],
+        default="All fields",
+        key="fc-field",
+        wrap=True,
+        width="stretch",
+    )
+    field = {
+        "All fields": "all",
+        "Math": "math",
+        "Physics": "physics",
+        "EE": "ee",
+        "ME": "me",
+    }.get(field_label or "All fields", "all")
+    family_label = st.pills(
+        "Family",
+        ["All families", *[CARD_FAMILY_LABEL[fid] for fid in CARD_FAMILY_ORDER]],
+        default="All families",
+        key="fc-family",
+        wrap=True,
+        width="stretch",
+    )
+    family_from_label = {label: fid for fid, label in CARD_FAMILY_LABEL.items()}
+    family = (
+        "all"
+        if (family_label or "All families") == "All families"
+        else family_from_label.get(family_label or "All families", "all")
+    )
+    cards = flashcards_for(field=field, family=family)
+    st.caption(f"{len(cards)} cards in this filter.")
+    if not cards:
+        st.info("No formula flashcards in this mix. Try All fields or another family.")
+        return
+
+    filt = f"{field}:{family}"
+    flash = st.session_state.setdefault(
+        "flash",
+        {"filter": None, "ids": [], "i": 0, "flipped": False},
+    )
+    if flash.get("filter") != filt or set(flash.get("ids") or []) != {c.id for c in cards}:
+        flash["filter"] = filt
+        flash["ids"] = shuffled_ids(cards)
+        flash["i"] = 0
+        flash["flipped"] = False
+
+    ids = flash["ids"]
+    index = flash["i"] % len(ids)
+    flash["i"] = index
+    by_id = {card.id: card for card in cards}
+    card = by_id[ids[index]]
+    tags = " · ".join(f"**{label}**" for label in card.field_labels())
+
+    st.markdown(f"**{index + 1} / {len(ids)}** · {card.family_label}")
+    st.caption(tags)
+    with st.container(border=True):
+        st.markdown(f"### {card.name}")
+        if not flash["flipped"]:
+            st.markdown(card.front)
+            st.caption("Recall the formula, then Flip.")
+        else:
+            st.latex(card.back_tex)
+            st.markdown(card.why)
+
+    cols = st.columns(4)
+    with cols[0]:
+        if st.button("Flip", key="fc-flip", use_container_width=True):
+            flash["flipped"] = not flash["flipped"]
+            st.rerun()
+    with cols[1]:
+        if st.button("Previous", key="fc-prev", use_container_width=True):
+            flash["i"] = (index - 1) % len(ids)
+            flash["flipped"] = False
+            st.rerun()
+    with cols[2]:
+        if st.button("Next", key="fc-next", use_container_width=True):
+            flash["i"] = (index + 1) % len(ids)
+            flash["flipped"] = False
+            st.rerun()
+    with cols[3]:
+        if st.button("Shuffle", key="fc-shuffle", use_container_width=True):
+            flash["ids"] = shuffled_ids(cards)
+            flash["i"] = 0
+            flash["flipped"] = False
+            st.rerun()
+
+
 def page_progress() -> None:
     st.title("Progress")
     data = st.session_state.progress
     rec = data.get("diagnostic")
+    history = data.get("diagnostic_history") or []
     if rec:
-        st.markdown(f"**Last diagnostic placement:** {rec.get('start_title')}")
+        form = rec.get("set_title") or rec.get("set_id") or "Placement"
+        st.markdown(f"**Last diagnostic ({form}):** {rec.get('start_title')}")
         st.markdown(rec.get("headline", ""))
     else:
         st.markdown("No diagnostic saved in this session yet.")
+    if len(history) > 1:
+        st.markdown("**All takes this session**")
+        for item in reversed(history):
+            form = item.get("set_title") or item.get("set_id") or "Placement"
+            st.caption(f"{form}: {item.get('start_title')} — {item.get('headline', '')}")
     st.markdown(f"**Attempts this session:** {len(data.get('attempts', []))}")
     st.download_button(
         "Download progress JSON",
@@ -880,7 +1072,12 @@ def page_identities() -> None:
     )
     st.caption(
         "Coverage matches the standard trig identity list "
-        "([Paul's Online Notes cheat sheet](https://tutorial.math.lamar.edu/pdf/Trig_Cheat_Sheet.pdf)). "
+        "([Paul's Online Notes cheat sheet](https://tutorial.math.lamar.edu/pdf/Trig_Cheat_Sheet.pdf)), "
+        "including both directions of the reciprocal identities, cotangent’s period π, "
+        "inverse trig copied from Paul’s Inverse Trig Functions "
+        "(y = sin⁻¹(x) equivalent to x = sin(y); domain/range inequalities; "
+        "inverse properties; sin⁻¹(x) = arcsin(x)), and all cyclic triangle laws "
+        "(sines, three cosines, three tangents, Mollweide). "
         "The layout, field tags, and drill are ours. Euler’s formula and vector components "
         "are included because they are the everyday EE / physics / ME forms of cosine and sine."
     )
@@ -908,7 +1105,7 @@ def page_identities() -> None:
             with st.expander(f"{family_name} · {len(rows)}", expanded=True):
                 for item in rows:
                     tags = " · ".join(f"**{label}**" for label in item.field_labels())
-                    st.markdown(rf"${item.lhs_tex} = {item.rhs_tex}$")
+                    st.markdown(item.labeled_markdown())
                     st.caption(f"{tags} — {item.why}")
     with tab_practice:
         family_label = st.pills(
@@ -951,6 +1148,8 @@ elif page == "Unit circle":
     page_unit_circle()
 elif page == "Identities":
     page_identities()
+elif page == "Formula flashcards":
+    page_flashcards()
 elif page == "Extra practice":
     page_extra()
 else:

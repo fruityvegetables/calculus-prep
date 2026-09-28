@@ -145,22 +145,22 @@ def other_trig(rng: random.Random, skill_id: str) -> Problem:
     if fn == "tan":
         prompt = f"Find the exact value of $\\tan({latex})$."
         ans = f"({sinv})/({cosv})"
-        why = "tan θ = sin θ / cos θ, wherever cosine is not 0."
+        why = "tan θ = sin θ / cos θ = 1 / cot θ, wherever cosine is not 0."
         pieces = f"sin = {sinv} and cos = {cosv}."
     elif fn == "cot":
         prompt = f"Find the exact value of $\\cot({latex})$."
         ans = f"({cosv})/({sinv})"
-        why = "cot θ = cos θ / sin θ, wherever sine is not 0."
+        why = "cot θ = cos θ / sin θ = 1 / tan θ, wherever sine is not 0."
         pieces = f"cos = {cosv} and sin = {sinv}."
     elif fn == "sec":
         prompt = f"Find the exact value of $\\sec({latex})$."
         ans = f"1/({cosv})"
-        why = "sec θ = 1 / cos θ, wherever cosine is not 0."
+        why = "sec θ = 1 / cos θ, and the other way is cos θ = 1 / sec θ, wherever cosine is not 0."
         pieces = f"cos = {cosv}, so the reciprocal is 1/({cosv})."
     else:
         prompt = f"Find the exact value of $\\csc({latex})$."
         ans = f"1/({sinv})"
-        why = "csc θ = 1 / sin θ, wherever sine is not 0."
+        why = "csc θ = 1 / sin θ, and the other way is sin θ = 1 / csc θ, wherever sine is not 0."
         pieces = f"sin = {sinv}, so the reciprocal is 1/({sinv})."
     disp = ans
     return _prob(
@@ -169,7 +169,10 @@ def other_trig(rng: random.Random, skill_id: str) -> Problem:
         prompt=prompt,
         answer=ans,
         answer_display=disp,
-        hint="tan = sin/cos, cot = cos/sin, sec = 1/cos, csc = 1/sin. Use unit-circle sine and cosine.",
+        hint=(
+            "Both directions: tan = sin/cos = 1/cot, cot = cos/sin = 1/tan, "
+            "sec = 1/cos, cos = 1/sec, csc = 1/sin, sin = 1/csc. Use unit-circle sine and cosine."
+        ),
         common_mistakes=["Inverting the ratio, or using cosine when the reciprocal of sine was required (csc, not sec)."],
         exam_tags=["ap_precalc_u3"],
         source="generated",
@@ -260,7 +263,7 @@ def tan_period(rng: random.Random, skill_id: str) -> Problem:
         prompt=prompt,
         answer=ans,
         answer_display=ans.replace("pi", "π"),
-        hint="Parent tangent has period π, not 2π. Period of tan(bx) is π/|b|.",
+        hint="Parent tangent and cotangent both have period π, not 2π. Period of tan(bx) or cot(bx) is π/|b|.",
         common_mistakes=["Using 2π/|b| as if tangent were sine."],
         exam_tags=["ap_precalc_u3"],
         source="generated",
@@ -268,9 +271,9 @@ def tan_period(rng: random.Random, skill_id: str) -> Problem:
         plot="tan",
         plot_data={"b": b},
         steps=_steps(
-            ("Goal", "Tangent repeats more often than sine because it comes from sin/cos and blows up at odd multiples of π/2."),
-            ("Parent period", "y = tan x has period π (from one vertical asymptote to the next matching one)."),
-            ("Compression", f"y = tan({b}x) has period π/|{b}| = {ans}."),
+            ("Goal", "Tangent repeats more often than sine because it comes from sin/cos and blows up at odd multiples of π/2. Cotangent has the same period π."),
+            ("Parent period", "y = tan x and y = cot x both have period π (from one vertical asymptote to the next matching one)."),
+            ("Compression", f"y = tan({b}x) has period π/|{b}| = {ans}. The same formula holds for cot({b}x)."),
             ("Asymptotes", "Those vertical lines are part of the graph's identity. Do not treat tan as a wave with amplitude."),
         ),
     )
@@ -278,44 +281,53 @@ def tan_period(rng: random.Random, skill_id: str) -> Problem:
 
 def inverse_trig(rng: random.Random, skill_id: str) -> Problem:
     options = [
-        ("arcsin", "1/2", "pi/6", "π/6"),
-        ("arcsin", "sqrt(2)/2", "pi/4", "π/4"),
-        ("arcsin", "sqrt(3)/2", "pi/3", "π/3"),
-        ("arcsin", "1", "pi/2", "π/2"),
-        ("arcsin", "0", "0", "0"),
-        ("arcsin", "-1/2", "-pi/6", "−π/6"),
-        ("arccos", "1/2", "pi/3", "π/3"),
-        ("arccos", "0", "pi/2", "π/2"),
-        ("arccos", "1", "0", "0"),
-        ("arccos", "-1", "pi", "π"),
-        ("arctan", "1", "pi/4", "π/4"),
-        ("arctan", "0", "0", "0"),
-        ("arctan", "-1", "-pi/4", "−π/4"),
+        ("sin", "1/2", "pi/6", "π/6"),
+        ("sin", "sqrt(2)/2", "pi/4", "π/4"),
+        ("sin", "sqrt(3)/2", "pi/3", "π/3"),
+        ("sin", "1", "pi/2", "π/2"),
+        ("sin", "0", "0", "0"),
+        ("sin", "-1/2", "-pi/6", "−π/6"),
+        ("cos", "1/2", "pi/3", "π/3"),
+        ("cos", "0", "pi/2", "π/2"),
+        ("cos", "1", "0", "0"),
+        ("cos", "-1", "pi", "π"),
+        ("tan", "1", "pi/4", "π/4"),
+        ("tan", "0", "0", "0"),
+        ("tan", "-1", "-pi/4", "−π/4"),
     ]
     meta = {
-        "arcsin": {
-            "latex": r"\arcsin",
-            "word": "arcsine (inverse sine)",
+        "sin": {
+            "inv": r"\sin^{-1}",
+            "alt": r"\arcsin",
+            "alt_en": "arcsin",
             "fwd": "sine",
             "fwd_tex": r"\sin",
-            "interval": r"[-\pi/2,\ \pi/2]",
-            "interval_en": "[-π/2, π/2]",
+            "domain": r"-1\le x\le 1",
+            "domain_en": "−1 ≤ x ≤ 1",
+            "rng": r"-\pi/2\le y\le\pi/2",
+            "rng_en": "−π/2 ≤ y ≤ π/2",
         },
-        "arccos": {
-            "latex": r"\arccos",
-            "word": "arccosine (inverse cosine)",
+        "cos": {
+            "inv": r"\cos^{-1}",
+            "alt": r"\arccos",
+            "alt_en": "arccos",
             "fwd": "cosine",
             "fwd_tex": r"\cos",
-            "interval": r"[0,\ \pi]",
-            "interval_en": "[0, π]",
+            "domain": r"-1\le x\le 1",
+            "domain_en": "−1 ≤ x ≤ 1",
+            "rng": r"0\le y\le\pi",
+            "rng_en": "0 ≤ y ≤ π",
         },
-        "arctan": {
-            "latex": r"\arctan",
-            "word": "arctangent (inverse tangent)",
+        "tan": {
+            "inv": r"\tan^{-1}",
+            "alt": r"\arctan",
+            "alt_en": "arctan",
             "fwd": "tangent",
             "fwd_tex": r"\tan",
-            "interval": r"[-\pi/2,\ \pi/2]",
-            "interval_en": "[-π/2, π/2]",
+            "domain": r"-\infty<x<\infty",
+            "domain_en": "−∞ < x < ∞",
+            "rng": r"-\pi/2<y<\pi/2",
+            "rng_en": "−π/2 < y < π/2",
         },
     }
     arg_tex_map = {
@@ -331,10 +343,22 @@ def inverse_trig(rng: random.Random, skill_id: str) -> Problem:
     info = meta[fn]
     arg_tex = arg_tex_map[arg]
     prompt = (
-        f"Evaluate ${info['latex']}({arg_tex})$ in radians (principal value).\n\n"
-        f"This is **{info['word']}**, not {info['fwd']}. "
-        f"Find the unique angle $\\theta$ in ${info['interval']}$ such that "
-        f"${info['fwd_tex']}(\\theta) = {arg_tex}$."
+        f"Evaluate ${info['inv']}({arg_tex})$ in radians.\n\n"
+        f"From Paul’s inverse trig table:\n\n"
+        f"**Function:** $y = {info['inv']}(x)$\n\n"
+        f"**Domain:** ${info['domain']}$\n\n"
+        f"**Range:** ${info['rng']}$\n\n"
+        f"**Definition:** $y = {info['inv']}(x)$ is equivalent to "
+        f"$x = {info['fwd_tex']}(y)$.\n\n"
+        f"**Inverse Properties:** "
+        r"$\cos(\cos^{-1}(x))=x$, $\cos^{-1}(\cos(\theta))=\theta$, "
+        r"$\sin(\sin^{-1}(x))=x$, $\sin^{-1}(\sin(\theta))=\theta$, "
+        r"$\tan(\tan^{-1}(x))=x$, $\tan^{-1}(\tan(\theta))=\theta$."
+        "\n\n"
+        f"**Alternate notation:** ${info['inv']}(x) = {info['alt']}(x)$.\n\n"
+        f"This is inverse {info['fwd']}, not {info['fwd']}. "
+        f"Find the unique $y$ in the range such that "
+        f"${info['fwd_tex']}(y) = {arg_tex}$."
     )
     return _prob(
         id=f"{skill_id}-{rng.randrange(10**9)}",
@@ -343,13 +367,14 @@ def inverse_trig(rng: random.Random, skill_id: str) -> Problem:
         answer=ans,
         answer_display=disp,
         hint=(
-            f"Principal values: {fn} lands in {info['interval_en']}. "
-            f"Ask which unit-circle angle in that interval has {info['fwd']} {arg}."
+            f"Paul: y = {fn}⁻¹(x) is equivalent to x = {info['fwd']}(y). "
+            f"Domain {info['domain_en']}; Range {info['rng_en']}. "
+            f"Alternate notation: {fn}⁻¹(x) = {info['alt_en']}(x)."
         ),
         common_mistakes=[
-            f"Evaluating {info['fwd']}({arg}) instead of {fn}({arg}). "
-            f"For example, cos(0) = 1, but arccos(0) = π/2 because cos(π/2) = 0.",
-            "Giving another angle with the same trig value that sits outside the principal range.",
+            f"Evaluating {info['fwd']}({arg}) instead of {fn}⁻¹({arg}). "
+            f"For example, cos(0) = 1, but cos⁻¹(0) = π/2 because cos(π/2) = 0.",
+            "Giving another angle with the same trig value that sits outside Paul’s range for that inverse.",
         ],
         exam_tags=["ap_precalc_u3"],
         source="generated",
@@ -359,25 +384,25 @@ def inverse_trig(rng: random.Random, skill_id: str) -> Problem:
         steps=_steps(
             (
                 "Goal",
-                f"You want the unique angle in {info['interval_en']} whose {info['fwd']} is {arg}. "
-                f"That is {fn}({arg}), which undoes {info['fwd']} — it is not {info['fwd']}({arg}).",
+                f"Paul’s definition: y = {fn}⁻¹({arg}) is equivalent to {info['fwd']}(y) = {arg}, "
+                f"with y in {info['rng_en']}. That is not {info['fwd']}({arg}), "
+                f"and it is not 1/{info['fwd']}({arg}).",
             ),
             (
-                "Range reminder",
-                f"{fn} only returns angles in {info['interval_en']}. "
+                "Domain and range",
+                f"Function y = {fn}⁻¹(x). Domain {info['domain_en']}. Range {info['rng_en']}. "
                 "Any other angle with the same trig value is a valid equation solution later, "
-                "but it is not the principal value.",
+                "but it is not the value of the inverse.",
             ),
             (
                 "Match a unit-circle angle",
                 f"On the unit circle, cosine is the x-coordinate and sine is the y-coordinate. "
-                f"The unique principal angle whose {info['fwd']} is {arg} is {disp}.",
+                f"The unique y in {info['rng_en']} whose {info['fwd']} is {arg} is {disp}.",
             ),
             (
                 "Check",
-                f"{info['fwd']}({disp}) = {arg}, and {disp} sits in {info['interval_en']}, "
-                f"so {fn}({arg}) = {disp}. If you mixed this up with {info['fwd']}({arg}), "
-                "you evaluated the wrong function.",
+                f"{info['fwd']}({disp}) = {arg}, and {disp} sits in {info['rng_en']}, "
+                f"so {fn}⁻¹({arg}) = {info['alt_en']}({arg}) = {disp}.",
             ),
         ),
     )
@@ -404,14 +429,24 @@ def identity_simplify(rng: random.Random, skill_id: str) -> Problem:
             ("Answer", "The expression simplifies to the integer 1, not to another trig function."),
         )
     else:
-        prompt = r"Simplify $\dfrac{1}{\sin x}$. Enter csc(x)."
-        ans, disp = "csc(x)", "csc(x)"
-        steps = _steps(
-            ("Goal", "Reciprocal identities rename 1 over a basic function."),
-            ("Definition", "csc x = 1/sin x, wherever sin x ≠ 0."),
-            ("Conclusion", "The simplified form is csc(x)."),
-            ("Not cosine", "The reciprocal of sine is cosecant, not cosine. Cosine is the cofunction, a different idea."),
-        )
+        if rng.choice([True, False]):
+            prompt = r"Simplify $\dfrac{1}{\sin x}$. Enter csc(x)."
+            ans, disp = "csc(x)", "csc(x)"
+            steps = _steps(
+                ("Goal", "Reciprocal identities go both ways: csc x = 1/sin x and sin x = 1/csc x."),
+                ("Definition", "csc x = 1/sin x, wherever sin x ≠ 0."),
+                ("Conclusion", "The simplified form is csc(x)."),
+                ("Not cosine", "The reciprocal of sine is cosecant, not cosine. Cosine is the cofunction, a different idea."),
+            )
+        else:
+            prompt = r"Simplify $\dfrac{1}{\csc x}$. Enter sin(x)."
+            ans, disp = "sin(x)", "sin(x)"
+            steps = _steps(
+                ("Goal", "The other reciprocal identity: sin x = 1/csc x, paired with csc x = 1/sin x."),
+                ("Definition", "1/csc x is sine, wherever csc x is defined (sin x ≠ 0)."),
+                ("Conclusion", "The simplified form is sin(x)."),
+                ("Not secant", "Do not swap the pair. 1/sec x is cosine, and 1/cot x is tangent."),
+            )
     return _prob(
         id=f"{skill_id}-{rng.randrange(10**9)}",
         skill_id=skill_id,
@@ -543,7 +578,7 @@ def law_sines(rng: random.Random, skill_id: str) -> Problem:
         steps = _steps(
             ("Goal", "Before using Law of Sines, see whether the missing piece is an angle. If two angles are known, the third is determined."),
             ("Angle sum", f"A + B + C = 180°, so C = 180 - {a_ang} - {b_ang} = {c_ang}."),
-            ("When you would use Law of Sines", "a/sin A = b/sin B. You need that after you have C, if the question asked for a side."),
+            ("When you would use Law of Sines", "The full form is a/sin A = b/sin B = c/sin C. You need that after you have C, if the question asked for a side."),
             ("Ambiguous case later", "SSA can produce 0, 1, or 2 triangles. AAS/ASA like this one is unique."),
         )
         hint = "Angles in a triangle sum to 180°. Law of Sines needs a side only when you are finding a side."
@@ -558,12 +593,12 @@ def law_sines(rng: random.Random, skill_id: str) -> Problem:
         )
         ans, disp = str(hyp), str(hyp)
         steps = _steps(
-            ("Goal", "Law of Sines: a/sin A = b/sin B. Here we know an angle-side pair and a second angle."),
+            ("Goal", "Law of Sines: a/sin A = b/sin B = c/sin C. Here we know an angle-side pair and a second angle."),
             ("Write the proportion", f"{a}/sin 30° = b/sin 90°. sin 30° = 1/2 and sin 90° = 1."),
             ("Solve for b", f"b = {a} / (1/2) = {hyp}. The side opposite 90° is the hypotenuse, twice the side opposite 30°."),
             ("Check", f"A 30-60-90 triangle with short leg {a} has hypotenuse {hyp}. Law of Sines recovered the same fact."),
         )
-        hint = "a/sin A = b/sin B. sin 30° = 1/2 and sin 90° = 1."
+        hint = "a/sin A = b/sin B = c/sin C. sin 30° = 1/2 and sin 90° = 1."
         miss = "Using sin 30° = √3/2, or swapping which side is opposite which angle."
     return _prob(
         id=f"{skill_id}-{rng.randrange(10**9)}",
@@ -591,11 +626,11 @@ def law_cosines(rng: random.Random, skill_id: str) -> Problem:
         ans, disp = "5", "5"
         steps = _steps(
             ("Goal", "Law of Cosines handles SAS or SSS. A right angle is the special case that becomes Pythagoras."),
-            ("Write the formula", "c² = a² + b² − 2ab cos C = 9 + 16 − 2·3·4·cos 90°."),
+            ("Write the formula", "c² = a² + b² − 2ab cos C = 9 + 16 − 2·3·4·cos 90°. The cyclic companions are a² = b² + c² − 2bc cos A and b² = a² + c² − 2ac cos B."),
             ("Cosine of 90°", "cos 90° = 0, so c² = 25 and c = 5 (length is positive)."),
             ("Name it", "This is a 3-4-5 right triangle. Law of Cosines agrees with Pythagoras when C is right."),
         )
-        hint = "Law of Cosines: c² = a² + b² − 2ab cos C. If C = 90°, cos 90° = 0 and this is Pythagoras."
+        hint = "Law of Cosines (all three cyclic forms): c² = a² + b² − 2ab cos C. If C = 90°, cos 90° = 0 and this is Pythagoras."
         miss = "Using a + b, or forgetting that the 2ab cos C term is 0 when C is right."
     else:
         side = rng.choice([4, 5, 6, 8])
@@ -610,7 +645,7 @@ def law_cosines(rng: random.Random, skill_id: str) -> Problem:
             ("Simplify", f"cos 60° = 1/2, so the last term is {side}². Then c² = {side}² + {side}² − {side}² = {side}²."),
             ("Length", f"c = {side} (positive). Two sides and a 60° included angle force all three sides equal."),
         )
-        hint = "Law of Cosines: c² = a² + b² − 2ab cos C. cos 60° = 1/2."
+        hint = "Law of Cosines (cyclic): c² = a² + b² − 2ab cos C. cos 60° = 1/2."
         miss = "Using Law of Sines on SAS (you don't have a side opposite a known angle pair yet), or using cos 60° = √3/2."
     return _prob(
         id=f"{skill_id}-{rng.randrange(10**9)}",
@@ -1071,7 +1106,7 @@ def triangle_area(rng: random.Random, skill_id: str) -> Problem:
         area = (a * b) // 2
         ans = str(area)
         steps = _steps(
-            ("Goal", "Area = (1/2) ab sin C, using the included angle between those two sides."),
+            ("Goal", "Area = (1/2) ab sin C, using the included angle between those two sides. (Law of Tangents and Mollweide live on the same triangle sheet but are not needed for area.)"),
             ("Right angle", f"sin 90° = 1, so area = (1/2)·{a}·{b} = {area}. That is the usual (1/2) base × height."),
             ("Why included", "C is the angle between a and b, so those sides can act as base and height after the sine."),
             ("Check", f"A right triangle with legs {a} and {b} has area {area}."),

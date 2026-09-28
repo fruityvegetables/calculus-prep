@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from src.curriculum import COURSES, Skill, all_skills, skill_by_id
-from src.diagnostic_bank import DIAGNOSTIC_PROBLEMS
+from src.diagnostic_bank import set_by_id
 from src.generate import ensure_all_generators, generate_problem
 from src.schema import Problem
 
@@ -45,8 +45,8 @@ STAGES = [
 ]
 
 
-def problems_for_stage(stage: int) -> list[Problem]:
-    return [p for p in DIAGNOSTIC_PROBLEMS if p.stage == stage]
+def problems_for_stage(stage: int, set_id: str | None = "placement") -> list[Problem]:
+    return list(set_by_id(set_id).problems_for_stage(stage))
 
 
 def generate_for_skill(skill: Skill, seed: int) -> Problem | None:
@@ -67,7 +67,10 @@ def score_stage(results: list[bool]) -> float:
     return sum(results) / len(results)
 
 
-def recommend(stage_results: dict[int, list[tuple[Problem, bool]]]) -> dict:
+def recommend(
+    stage_results: dict[int, list[tuple[Problem, bool]]],
+    pass_ratio: float = PASS_RATIO,
+) -> dict:
     """Return placement from completed stages.
 
     stage_results maps stage number to a list of (problem, correct) in order.
@@ -84,7 +87,7 @@ def recommend(stage_results: dict[int, list[tuple[Problem, bool]]]) -> dict:
         ratio = score_stage(marks)
         missed = [p.skill_id for p, ok in pairs if not ok]
         weak_skills.extend(missed)
-        if ratio < PASS_RATIO and first_fail_stage is None:
+        if ratio < pass_ratio and first_fail_stage is None:
             first_fail_stage = stage
             first_fail_skill = missed[0] if missed else pairs[0][0].skill_id
 
@@ -104,7 +107,7 @@ def recommend(stage_results: dict[int, list[tuple[Problem, bool]]]) -> dict:
         titles = {1: "algebra foundations", 2: "functions / college algebra", 3: "trigonometry", 4: "precalculus extras"}
         headline = (
             f"Stop and study {titles[first_fail_stage]} first. "
-            f"You were below {int(PASS_RATIO*100)}% on that stage, so later stages would be guessing."
+            f"You were below {int(pass_ratio*100)}% on that stage, so later stages would be guessing."
         )
         ready_for_calc_caution = False
 
