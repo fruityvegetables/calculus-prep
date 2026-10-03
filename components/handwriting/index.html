@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      html, body { margin: 0; font-family: system-ui, "Segoe UI", sans-serif; color: #e8eef8; background: transparent; }
+      [hidden] { display: none !important; }
+      .wrap { display: flex; flex-direction: column; gap: 0.45rem; }
+      .row { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
+      .frame { position: relative; }
+      canvas {
+        width: 100%;
+        height: 220px;
+        display: block;
+        touch-action: none;
+        border: 1px solid #3d4b61;
+        border-radius: 10px;
+        background: #0b1220;
+        cursor: crosshair;
+      }
+      canvas.erasing { cursor: none; }
+      .eraser-cursor {
+        position: absolute;
+        box-sizing: border-box;
+        border: 1.5px solid #f8fafc;
+        border-radius: 50%;
+        pointer-events: none;
+      }
+      button {
+        min-height: 44px;
+        padding: 0 0.8rem;
+        border: 1px solid #3d4b61;
+        border-radius: 10px;
+        background: #111827;
+        color: #f8fafc;
+        font: inherit;
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+      button.primary { width: 100%; background: #e11d48; border-color: #e11d48; color: #fff; font-weight: 600; }
+      button.on { background: #9a3412; border-color: #fb923c; color: #fff; }
+      button:disabled { opacity: 0.45; cursor: default; }
+      output {
+        margin-left: auto;
+        min-width: 4.5rem;
+        max-width: 55%;
+        min-height: 44px;
+        padding: 0.35rem 0.65rem;
+        border: 1px solid #3d4b61;
+        border-radius: 10px;
+        text-align: right;
+        background: #0b1220;
+        color: #f8fafc;
+        overflow-wrap: anywhere;
+      }
+      .note, .err { margin: 0; font-size: 0.85rem; color: #9aa8bc; }
+      .err { color: #fca5a5; }
+      input[type="range"] { width: 8rem; }
+      label.check { display: flex; align-items: center; gap: 0.35rem; font-size: 0.9rem; color: #cbd5e1; }
+      .load {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 0.15rem 0.6rem;
+        font-size: 0.78rem;
+        color: #cbd5e1;
+      }
+      .load .bar {
+        grid-column: 1 / -1;
+        height: 6px;
+        border-radius: 99px;
+        background: #1f2a3d;
+        overflow: hidden;
+      }
+      .load .bar > span {
+        display: block;
+        height: 100%;
+        width: 0%;
+        background: #e11d48;
+        border-radius: 99px;
+      }
+      .load.busy .bar > span { background: #fb7185; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="frame" id="frame">
+        <canvas id="pad"></canvas>
+        <div id="cursor" class="eraser-cursor" hidden></div>
+      </div>
+      <div class="row">
+        <button id="undo" type="button" disabled>Undo</button>
+        <button id="clear" type="button" disabled>Clear</button>
+        <button id="eraser" type="button">Eraser</button>
+        <output id="readout" hidden></output>
+      </div>
+      <div id="eraser-row" class="row" hidden>
+        <label class="check">Eraser size <input id="size" type="range" min="8" max="48" value="18" /></label>
+      </div>
+      <button id="check" class="primary" type="button" disabled>Read as answer</button>
+      <div id="loads" class="load busy" hidden>
+        <span id="load-label">Loading reader</span>
+        <span id="load-pct">0%</span>
+        <div class="bar"><span id="load-fill"></span></div>
+      </div>
+      <p id="note" class="note">Write one expression. Eraser rubs out ink. Read fills the answer box.</p>
+    </div>
+    <script>
+      const strokes = []
+      let drawing = false
+      let erasing = false
+      let gesture = null
+      const frame = document.getElementById("frame")
+      const canvas = document.getElementById("pad")
+      const ctx = canvas.getContext("2d")
+      const cursor = document.getElementById("cursor")
+      const undoBtn = document.getElementById("undo")
+      const clearBtn = document.getElementById("clear")
+      const eraserBtn = document.getElementById("eraser")
+      const checkBtn = document.getElementById("check")
+      const readout = document.getElementById("readout")
+      const note = document.getElementById("note")
+      const loadsRoot = document.getElementById("loads")
+      const eraserRow = document.getElementById("eraser-row")
+      const sizeInput = document.getElementById("size")
+      const SIZE_KEY = "calc1-prep:eraser-size"
+      let cursorPoint = null
+      const savedSize = Number(localStorage.getItem(SIZE_KEY))
+      if (savedSize >= 8 && savedSize <= 48) sizeInput.value = String(savedSize)
+
+      function resize() {
+        const dpr = window.devicePixelRatio || 1
+        const rect = canvas.getBoundingClientRect()
+        canvas.width = Math.max(1, Math.round(rect.width * dpr))
+        canvas.height = Math.max(1, Math.round(rect.height * dpr))
+        paint()
+      }
+
+      function drawStrokes(target, color, dpr, lineWidth) {
+        target.lineCap = "round"
+        target.lineJoin = "round"
+        target.strokeStyle = color
+        target.lineWidth = (lineWidth || 2.4) * dpr
+        for (const stroke of strokes) {
+          if (!stroke.length) continue
+          target.beginPath()
+          target.moveTo(stroke[0].x * dpr, stroke[0].y * dpr)
+          if (stroke.length === 1) target.lineTo(stroke[0].x * dpr + 0.1, stroke[0].y * dpr)
+          else stroke.slice(1).forEach((point) => target.lineTo(point.x * dpr, point.y * dpr))
+          target.stroke()
+        }
+      }
+
+      function placeCursor() {
+        if (!erasing || !cursorPoint) {
+          cursor.hidden = true
+          return
+        }
+        const radius = Number(sizeInput.value)
+        cursor.hidden = false
+        cursor.style.width = radius * 2 + "px"
+        cursor.style.height = radius * 2 + "px"
+        cursor.style.left = cursorPoint.x - radius + "px"
+        cursor.style.top = cursorPoint.y - radius + "px"
+      }
+
+      function paint() {
+        const dpr = canvas.width / canvas.clientWidth || 1
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        drawStrokes(ctx, "#f8fafc", dpr)
+        const empty = strokes.length === 0
+        undoBtn.disabled = empty
+        clearBtn.disabled = empty
+        checkBtn.disabled = empty || checkBtn.dataset.busy === "1"
+      }
+
+      function pointOf(event) {
+        const rect = canvas.getBoundingClientRect()
+        return { x: event.clientX - rect.left, y: event.clientY - rect.top }
+      }
+
+      function distance(a, b) {
+        return Math.hypot(a.x - b.x, a.y - b.y)
+      }
+
+      function segmentDistance(point, start, end) {
+        const dx = end.x - start.x
+        const dy = end.y - start.y
+        const length = dx * dx + dy * dy
+        if (!length) return distance(point, start)
+        const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / length))
+        return Math.hypot(point.x - (start.x + t * dx), point.y - (start.y + t * dy))
+      }
+
+      function hits(stroke, point, radius) {
+        for (let i = 0; i < stroke.length; i++) {
+          if (distance(stroke[i], point) <= radius) return true
+          if (i && segmentDistance(point, stroke[i - 1], stroke[i]) <= radius) return true
+        }
+        return false
+      }
+
+      function eraseAt(point, radius) {
+        const next = []
+        for (const stroke of strokes) {
+          let piece = []
+          for (const sample of stroke) {
+            if (distance(sample, point) <= radius) {
+              if (piece.length) next.push(piece)
+              piece = []
+            } else piece.push(sample)
+          }
+          if (piece.length) next.push(piece)
+        }
+        strokes.splice(0, strokes.length, ...next)
+      }
+
+      function showNote(text, isError) {
+        note.hidden = !text
+        note.textContent = text || ""
+        note.className = isError ? "err" : "note"
+        fit()
+      }
+
+      function onDown(event) {
+        showNote("Write one expression. Eraser rubs out ink. Read fills the answer box.")
+        canvas.setPointerCapture(event.pointerId)
+        const point = pointOf(event)
+        drawing = true
+        if (erasing) {
+          gesture = { start: point, last: point, moved: false }
+          return
+        }
+        strokes.push([point])
+        paint()
+      }
+
+      function onMove(event) {
+        const point = pointOf(event)
+        if (erasing) {
+          cursorPoint = point
+          placeCursor()
+        }
+        if (!drawing) return
+        if (erasing && gesture) {
+          if (distance(gesture.start, point) > 3) gesture.moved = true
+          const radius = Number(sizeInput.value)
+          const steps = Math.max(1, Math.ceil(distance(gesture.last, point) / 4))
+          for (let i = 1; i <= steps; i++) {
+            const t = i / steps
+            eraseAt({
+              x: gesture.last.x + (point.x - gesture.last.x) * t,
+              y: gesture.last.y + (point.y - gesture.last.y) * t,
+            }, radius)
+          }
+          gesture.last = point
+          paint()
+          return
+        }
+        const stroke = strokes[strokes.length - 1]
+        if (!stroke) return
+        stroke.push(point)
+        paint()
+      }
+
+      function onUp() {
+        if (erasing && gesture && !gesture.moved) {
+          const radius = Math.max(Number(sizeInput.value), 16)
+          const kept = strokes.filter((stroke) => !hits(stroke, gesture.start, radius))
+          strokes.splice(0, strokes.length, ...kept)
+          paint()
+        }
+        drawing = false
+        gesture = null
+      }
+
+      function boundsOf(points) {
+        let minX = Infinity
+        let minY = Infinity
+        let maxX = -Infinity
+        let maxY = -Infinity
+        for (const point of points) {
+          if (point.x < minX) minX = point.x
+          if (point.y < minY) minY = point.y
+          if (point.x > maxX) maxX = point.x
+          if (point.y > maxY) maxY = point.y
+        }
+        return { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY }
+      }
+
+      function exportCanvas() {
+        const box = boundsOf(strokes.flat())
+        const pen = 8
+        const minX = box.minX - pen
+        const maxX = box.maxX + pen
+        const minY = box.minY - pen
+        const maxY = box.maxY + pen
+        const inkW = Math.max(maxX - minX, 1)
+        const inkH = Math.max(maxY - minY, 1)
+        const scale = Math.min(3, 420 / Math.max(inkW, inkH))
+        const pad = 28
+        const copy = document.createElement("canvas")
+        copy.width = Math.ceil(inkW * scale + pad * 2)
+        copy.height = Math.ceil(inkH * scale + pad * 2)
+        const out = copy.getContext("2d")
+        out.fillStyle = "#ffffff"
+        out.fillRect(0, 0, copy.width, copy.height)
+        out.save()
+        out.translate(pad - minX * scale, pad - minY * scale)
+        out.scale(scale, scale)
+        drawStrokes(out, "#111111", 1, 4)
+        out.restore()
+        return copy
+      }
+
+      const MODEL_ID = "HuggingFaceTB/SmolVLM-256M-Instruct"
+      const READ_PROMPT = "Transcribe the handwritten math. Reply with only one calculator expression. Write fractions as (a)/(b). Write sqrt(x) and pi. No LaTeX, braces, dollar signs, or backslashes."
+      let readerPromise = null
+      const packages = {}
+      const loadLabel = document.getElementById("load-label")
+      const loadPct = document.getElementById("load-pct")
+      const loadFill = document.getElementById("load-fill")
+
+      function loadKey(item) {
+        return item.file || item.name || item.status || "file"
+      }
+
+      function percentOf(item) {
+        if (Number.isFinite(item.progress)) {
+          return item.progress <= 1 ? item.progress * 100 : item.progress
+        }
+        if (Number.isFinite(item.loaded) && Number.isFinite(item.total) && item.total > 0) {
+          return 100 * item.loaded / item.total
+        }
+        return 0
+      }
+
+      function packagePercent() {
+        const items = Object.values(packages)
+        if (!items.length) return 0
+        let loaded = 0
+        let total = 0
+        for (const item of items) {
+          if (Number.isFinite(item.loaded) && Number.isFinite(item.total) && item.total > 0) {
+            loaded += item.loaded
+            total += item.total
+          }
+        }
+        if (total > 0) return 100 * loaded / total
+        return items.reduce((sum, item) => sum + item.progress, 0) / items.length
+      }
+
+      function showLoad(label, progress, done) {
+        const pct = Math.max(0, Math.min(100, progress))
+        loadsRoot.hidden = false
+        loadsRoot.classList.toggle("busy", !done)
+        loadLabel.textContent = label
+        loadPct.textContent = done ? "done" : Math.round(pct) + "%"
+        loadFill.style.width = pct + "%"
+        fit()
+      }
+
+      function hideLoad() {
+        Object.keys(packages).forEach((id) => delete packages[id])
+        loadsRoot.hidden = true
+        fit()
+      }
+
+      function onFileProgress(item) {
+        if (!item || !item.status) return
+        const id = loadKey(item)
+        const prev = packages[id] || { progress: 0, loaded: 0, total: 0 }
+        if (item.status === "initiate" || item.status === "download") {
+          packages[id] = prev
+        } else if (item.status === "progress") {
+          packages[id] = {
+            progress: percentOf(item),
+            loaded: Number.isFinite(item.loaded) ? item.loaded : prev.loaded,
+            total: Number.isFinite(item.total) ? item.total : prev.total,
+          }
+        } else if (item.status === "done" || item.status === "ready") {
+          packages[id] = {
+            progress: 100,
+            loaded: Number.isFinite(item.total) ? item.total : (prev.total || prev.loaded),
+            total: Number.isFinite(item.total) ? item.total : (prev.total || prev.loaded),
+          }
+        } else {
+          return
+        }
+        showLoad("Loading reader", packagePercent(), false)
+      }
+
+      function plainMath(text) {
+        let value = String(text)
+          .replace(/\\left|\\right/g, "")
+          .replace(/\\(?:cdot|times)/g, "*")
+          .replace(/\\pi/g, "pi")
+        const inner = "[^{}]*"
+        for (let pass = 0; pass < 8; pass++) {
+          const next = value
+            .replace(new RegExp("\\\\frac\\{(" + inner + ")\\}\\{(" + inner + ")\\}", "g"), "($1)/($2)")
+            .replace(new RegExp("\\\\sqrt\\{(" + inner + ")\\}", "g"), "sqrt($1)")
+            .replace(new RegExp("\\^\\{(" + inner + ")\\}", "g"), "^$1")
+            .replace(new RegExp("_\\{(" + inner + ")\\}", "g"), "_$1")
+          if (next === value) break
+          value = next
+        }
+        value = value.replace(/\\(?:sin|cos|tan|cot|sec|csc|ln|log|sqrt)/g, (token) => token.slice(1))
+        return value.replace(/[{}]/g, "").replace(/\\/g, "")
+      }
+
+      function cleanExpression(text) {
+        let reply = String(text || "")
+        for (const marker of ["Assistant:", "assistant:"]) {
+          const at = reply.lastIndexOf(marker)
+          if (at >= 0) reply = reply.slice(at + marker.length)
+        }
+        const lines = reply.replace(/```/g, "").trim().split("\n").map((line) => line.trim()).filter(Boolean)
+        let line = lines[0] || ""
+        for (const extra of lines.slice(1)) {
+          if (/^[A-Za-z]/.test(extra) && extra.includes(" ")) break
+          line += extra
+        }
+        line = line.replace(/^(the expression is|expression|answer)\s*[:=]?\s*/i, "").trim()
+        line = line.replace(/^\$+|\$+$/g, "")
+        if (line.length >= 2 && line[0] === line[line.length - 1] && "\"'`".includes(line[0])) line = line.slice(1, -1)
+        return plainMath(line).replace(/\s+/g, "")
+      }
+
+      function generatedText(processor, generated, inputs) {
+        const sequences = generated && generated.sequences ? generated.sequences : generated
+        const start = inputs && inputs.input_ids && inputs.input_ids.dims
+          ? inputs.input_ids.dims.at(-1)
+          : 0
+        const tokens = start ? sequences.slice(null, [start, null]) : sequences
+        const decoded = processor.batch_decode(tokens, { skip_special_tokens: true })
+        return Array.isArray(decoded) ? decoded[0] : String(decoded || "")
+      }
+
+      async function loadReader() {
+        if (!readerPromise) {
+          readerPromise = (async () => {
+            packages.lib = { progress: 8, loaded: 8, total: 100 }
+            showLoad("Loading reader", packagePercent(), false)
+            const transformers = await import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0")
+            packages.lib = { progress: 100, loaded: 100, total: 100 }
+            showLoad("Loading reader", packagePercent(), false)
+            let device = "wasm"
+            if (navigator.gpu) {
+              try {
+                const adapter = await navigator.gpu.requestAdapter()
+                if (adapter) device = "webgpu"
+              } catch (err) { /* keep wasm */ }
+            }
+            const processor = await transformers.AutoProcessor.from_pretrained(MODEL_ID, {
+              progress_callback: onFileProgress,
+            })
+            const model = await transformers.AutoModelForVision2Seq.from_pretrained(MODEL_ID, {
+              device,
+              dtype: "q4",
+              progress_callback: onFileProgress,
+            })
+            showLoad("Loading reader", 100, true)
+            return { transformers, processor, model }
+          })().catch((err) => {
+            readerPromise = null
+            throw err
+          })
+        }
+        return readerPromise
+      }
+
+      async function transcribe() {
+        const copy = exportCanvas()
+        const { transformers, processor, model } = await loadReader()
+        const image = await transformers.RawImage.fromURL(copy.toDataURL("image/png"))
+        const messages = [{
+          role: "user",
+          content: [
+            { type: "image" },
+            { type: "text", text: READ_PROMPT },
+          ],
+        }]
+        const prompt = processor.apply_chat_template(messages, { add_generation_prompt: true })
+        const inputs = await processor(prompt, [image], { do_image_splitting: false })
+        const generated = await model.generate({
+          ...inputs,
+          max_new_tokens: 80,
+          do_sample: false,
+        })
+        return cleanExpression(generatedText(processor, generated, inputs))
+      }
+
+      async function readPad() {
+        if (!strokes.length || checkBtn.dataset.busy === "1") return
+        checkBtn.dataset.busy = "1"
+        checkBtn.disabled = true
+        readout.hidden = true
+        showNote("")
+        try {
+          const expression = await transcribe()
+          if (!expression) throw new Error("Could not read that. Write one expression, large and clear.")
+          hideLoad()
+          readout.hidden = false
+          readout.textContent = expression
+          post("streamlit:setComponentValue", {
+            value: { expression, nonce: Date.now() },
+            dataType: "json",
+          })
+        } catch (err) {
+          hideLoad()
+          readout.hidden = true
+          showNote(err && err.message ? err.message : "Could not read the handwriting.", true)
+        } finally {
+          checkBtn.dataset.busy = ""
+          paint()
+          fit()
+        }
+      }
+
+      function post(type, extra) {
+        window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type }, extra || {}), "*")
+      }
+
+      function fit() {
+        post("streamlit:setFrameHeight", { height: Math.max(360, document.body.scrollHeight) })
+      }
+
+      sizeInput.addEventListener("input", () => {
+        localStorage.setItem(SIZE_KEY, sizeInput.value)
+        placeCursor()
+      })
+      eraserBtn.addEventListener("click", () => {
+        erasing = !erasing
+        eraserBtn.classList.toggle("on", erasing)
+        canvas.classList.toggle("erasing", erasing)
+        eraserRow.hidden = !erasing
+        if (!erasing) {
+          cursorPoint = null
+          placeCursor()
+        }
+        fit()
+      })
+      undoBtn.addEventListener("click", () => { strokes.pop(); paint() })
+      clearBtn.addEventListener("click", () => { strokes.splice(0); readout.hidden = true; showNote("Write one expression. Eraser rubs out ink. Read fills the answer box."); paint() })
+      checkBtn.addEventListener("click", readPad)
+      canvas.addEventListener("pointerdown", onDown)
+      canvas.addEventListener("pointermove", onMove)
+      canvas.addEventListener("pointerup", onUp)
+      canvas.addEventListener("pointercancel", onUp)
+      canvas.addEventListener("pointerleave", () => {
+        if (!drawing) {
+          cursorPoint = null
+          placeCursor()
+        }
+      })
+      window.addEventListener("resize", resize)
+      new ResizeObserver(resize).observe(canvas)
+
+      window.addEventListener("message", (event) => {
+        if (event.data && event.data.type === "streamlit:render") fit()
+      })
+      resize()
+      post("streamlit:componentReady", { apiVersion: 1 })
+      fit()
+    </script>
+  </body>
+</html>

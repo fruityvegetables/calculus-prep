@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      html, body { margin: 0; font-family: system-ui, "Segoe UI", sans-serif; color: #e8eef8; background: transparent; }
+      [hidden] { display: none !important; }
+      .wrap { display: flex; flex-direction: column; gap: 0.45rem; }
+      .row { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
+      .row.spread { justify-content: space-between; }
+      label.check { display: flex; align-items: center; gap: 0.35rem; font-size: 0.9rem; color: #cbd5e1; }
+      .frame { position: relative; }
+      canvas {
+        width: 100%;
+        height: 340px;
+        display: block;
+        touch-action: none;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        background: #fff;
+        cursor: crosshair;
+      }
+      .frame.dark canvas { border-color: #3d4b61; }
+      canvas.erasing { cursor: none; }
+      .eraser-cursor {
+        position: absolute;
+        box-sizing: border-box;
+        border: 1.5px solid #111;
+        border-radius: 50%;
+        pointer-events: none;
+      }
+      .frame.dark .eraser-cursor { border-color: #f8fafc; }
+      button {
+        min-height: 40px;
+        padding: 0 0.8rem;
+        border: 1px solid #3d4b61;
+        border-radius: 10px;
+        background: #111827;
+        color: #f8fafc;
+        font: inherit;
+        cursor: pointer;
+      }
+      button.primary { width: 100%; background: #e11d48; border-color: #e11d48; color: #fff; font-weight: 600; }
+      button.on { background: #111827; color: #fff; border-color: #111827; }
+      button:disabled { opacity: 0.45; cursor: default; }
+      .note, .err { margin: 0; font-size: 0.85rem; color: #cbd5e1; }
+      .err { color: #b91c1c; }
+      input[type="range"] { width: 8rem; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="row spread">
+        <span>Graph paper</span>
+        <label class="check"><input id="dark" type="checkbox" /> Dark pad</label>
+        <label class="check"><input id="mouse" type="checkbox" /> Mouse strokes</label>
+      </div>
+      <div class="frame" id="frame">
+        <canvas id="pad"></canvas>
+        <div id="cursor" class="eraser-cursor" hidden></div>
+      </div>
+      <div class="row">
+        <button id="undo" type="button" disabled>Undo</button>
+        <button id="clear" type="button" disabled>Clear</button>
+        <button id="eraser" type="button">Eraser</button>
+        <label id="eraser-size" class="check" hidden>Size <input id="size" type="range" min="8" max="48" value="18" /></label>
+      </div>
+      <button id="check" class="primary" type="button" disabled>Check sketch</button>
+      <p id="note" class="note">Each square is 1. Draw the curve, then check the sketch.</p>
+    </div>
+    <script>
+      const XMIN = -6
+      const XMAX = 6
+      const YMIN = -6
+      const YMAX = 6
+      const strokes = []
+      let drawing = false
+      let erasing = false
+      let gesture = null
+      let cursorPoint = null
+      const frame = document.getElementById("frame")
+      const canvas = document.getElementById("pad")
+      const ctx = canvas.getContext("2d")
+      const cursor = document.getElementById("cursor")
+      const darkBox = document.getElementById("dark")
+      const mouseBox = document.getElementById("mouse")
+      const undoBtn = document.getElementById("undo")
+      const clearBtn = document.getElementById("clear")
+      const eraserBtn = document.getElementById("eraser")
+      const sizeLabel = document.getElementById("eraser-size")
+      const sizeInput = document.getElementById("size")
+      const checkBtn = document.getElementById("check")
+      const note = document.getElementById("note")
+      const DARK_KEY = "calc1-prep:pad-dark"
+      const MOUSE_KEY = "calc1-prep:mouse-strokes"
+      const SIZE_KEY = "calc1-prep:eraser-size"
+      darkBox.checked = localStorage.getItem(DARK_KEY) === "1"
+      mouseBox.checked = localStorage.getItem(MOUSE_KEY) === "1"
+      const savedSize = Number(localStorage.getItem(SIZE_KEY))
+      if (savedSize >= 8 && savedSize <= 48) sizeInput.value = String(savedSize)
+
+      function post(type, extra) {
+        window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type }, extra || {}), "*")
+      }
+
+      function fit() {
+        post("streamlit:setFrameHeight", { height: Math.max(460, document.body.scrollHeight) })
+      }
+
+      function showNote(text, isError) {
+        note.textContent = text
+        note.className = isError ? "err" : "note"
+        fit()
+      }
+
+      function resize() {
+        const dpr = window.devicePixelRatio || 1
+        const rect = canvas.getBoundingClientRect()
+        canvas.width = Math.max(1, Math.round(rect.width * dpr))
+        canvas.height = Math.max(1, Math.round(rect.height * dpr))
+        paint()
+      }
+
+      function toMath(point) {
+        const w = canvas.clientWidth
+        const h = canvas.clientHeight
+        return {
+          x: XMIN + (point.x / w) * (XMAX - XMIN),
+          y: YMAX - (point.y / h) * (YMAX - YMIN),
+        }
+      }
+
+      function drawGrid() {
+        const w = canvas.clientWidth
+        const h = canvas.clientHeight
+        const dark = frame.classList.contains("dark")
+        ctx.fillStyle = dark ? "#0b1220" : "#ffffff"
+        ctx.fillRect(0, 0, w, h)
+        const xOf = (x) => ((x - XMIN) / (XMAX - XMIN)) * w
+        const yOf = (y) => ((YMAX - y) / (YMAX - YMIN)) * h
+        ctx.lineWidth = 1
+        ctx.font = "12px system-ui, sans-serif"
+        ctx.textAlign = "center"
+        ctx.textBaseline = "top"
+        for (let t = -6; t <= 6; t++) {
+          const axis = t === 0
+          ctx.strokeStyle = axis ? (dark ? "#94a3b8" : "#334155") : (dark ? "#243044" : "#e2e8f0")
+          ctx.beginPath()
+          ctx.moveTo(xOf(t), 0)
+          ctx.lineTo(xOf(t), h)
+          ctx.moveTo(0, yOf(t))
+          ctx.lineTo(w, yOf(t))
+          ctx.stroke()
+          if (t !== 0 && t % 2 === 0) {
+            ctx.fillStyle = dark ? "#94a3b8" : "#64748b"
+            ctx.fillText(String(t), xOf(t), yOf(0) + 4)
+            ctx.textAlign = "right"
+            ctx.textBaseline = "middle"
+            ctx.fillText(String(t), xOf(0) - 4, yOf(t))
+            ctx.textAlign = "center"
+            ctx.textBaseline = "top"
+          }
+        }
+      }
+
+      function drawStrokes() {
+        ctx.lineCap = "round"
+        ctx.lineJoin = "round"
+        ctx.strokeStyle = frame.classList.contains("dark") ? "#fb7185" : "#e11d48"
+        ctx.lineWidth = 2.6
+        for (const stroke of strokes) {
+          if (!stroke.length) continue
+          ctx.beginPath()
+          ctx.moveTo(stroke[0].x, stroke[0].y)
+          if (stroke.length === 1) ctx.lineTo(stroke[0].x + 0.1, stroke[0].y)
+          else stroke.slice(1).forEach((point) => ctx.lineTo(point.x, point.y))
+          ctx.stroke()
+        }
+      }
+
+      function paint() {
+        const dpr = canvas.width / canvas.clientWidth || 1
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+        drawGrid()
+        drawStrokes()
+        const empty = strokes.length === 0
+        undoBtn.disabled = empty
+        clearBtn.disabled = empty
+        checkBtn.disabled = empty
+      }
+
+      function placeCursor() {
+        if (!erasing || !cursorPoint) {
+          cursor.hidden = true
+          return
+        }
+        const radius = Number(sizeInput.value)
+        cursor.hidden = false
+        cursor.style.width = radius * 2 + "px"
+        cursor.style.height = radius * 2 + "px"
+        cursor.style.left = cursorPoint.x - radius + "px"
+        cursor.style.top = cursorPoint.y - radius + "px"
+      }
+
+      function pointOf(event) {
+        const rect = canvas.getBoundingClientRect()
+        return { x: event.clientX - rect.left, y: event.clientY - rect.top }
+      }
+
+      function distance(a, b) {
+        return Math.hypot(a.x - b.x, a.y - b.y)
+      }
+
+      function eraseAt(point, radius) {
+        const next = []
+        for (const stroke of strokes) {
+          let piece = []
+          for (const sample of stroke) {
+            if (distance(sample, point) <= radius) {
+              if (piece.length) next.push(piece)
+              piece = []
+            } else piece.push(sample)
+          }
+          if (piece.length) next.push(piece)
+        }
+        strokes.splice(0, strokes.length, ...next)
+      }
+
+      function onDown(event) {
+        if (event.pointerType === "mouse" && !mouseBox.checked) {
+          showNote("Mouse drawing is off. Turn on Mouse strokes to draw with a mouse.", true)
+          return
+        }
+        showNote("Each square is 1. Draw the curve, then check the sketch.", false)
+        canvas.setPointerCapture(event.pointerId)
+        const point = pointOf(event)
+        drawing = true
+        if (erasing) {
+          gesture = { start: point, last: point }
+          return
+        }
+        strokes.push([point])
+        paint()
+      }
+
+      function onMove(event) {
+        const point = pointOf(event)
+        if (erasing) {
+          cursorPoint = point
+          placeCursor()
+        }
+        if (!drawing) return
+        if (erasing && gesture) {
+          const radius = Number(sizeInput.value)
+          const steps = Math.max(1, Math.ceil(distance(gesture.last, point) / 4))
+          for (let i = 1; i <= steps; i++) {
+            const t = i / steps
+            eraseAt({
+              x: gesture.last.x + (point.x - gesture.last.x) * t,
+              y: gesture.last.y + (point.y - gesture.last.y) * t,
+            }, radius)
+          }
+          gesture.last = point
+          paint()
+          return
+        }
+        const stroke = strokes[strokes.length - 1]
+        if (!stroke) return
+        stroke.push(point)
+        paint()
+      }
+
+      function onUp() {
+        drawing = false
+        gesture = null
+      }
+
+      function samplePoints() {
+        const points = []
+        for (const stroke of strokes) {
+          if (!stroke.length) continue
+          let last = null
+          stroke.forEach((point, index) => {
+            if (index !== stroke.length - 1 && last && distance(last, point) < 3) return
+            last = point
+            const math = toMath(point)
+            points.push([Math.round(math.x * 100) / 100, Math.round(math.y * 100) / 100])
+          })
+        }
+        return points
+      }
+
+      darkBox.addEventListener("change", () => {
+        localStorage.setItem(DARK_KEY, darkBox.checked ? "1" : "0")
+        frame.classList.toggle("dark", darkBox.checked)
+        paint()
+      })
+      mouseBox.addEventListener("change", () => {
+        localStorage.setItem(MOUSE_KEY, mouseBox.checked ? "1" : "0")
+      })
+      sizeInput.addEventListener("input", () => {
+        localStorage.setItem(SIZE_KEY, sizeInput.value)
+        placeCursor()
+      })
+      eraserBtn.addEventListener("click", () => {
+        erasing = !erasing
+        eraserBtn.classList.toggle("on", erasing)
+        canvas.classList.toggle("erasing", erasing)
+        sizeLabel.hidden = !erasing
+        if (!erasing) {
+          cursorPoint = null
+          placeCursor()
+        }
+        fit()
+      })
+      undoBtn.addEventListener("click", () => { strokes.pop(); paint() })
+      clearBtn.addEventListener("click", () => {
+        strokes.splice(0)
+        showNote("Each square is 1. Draw the curve, then check the sketch.", false)
+        paint()
+      })
+      checkBtn.addEventListener("click", () => {
+        const points = samplePoints()
+        if (points.length < 12) {
+          showNote("Draw more of the curve. A short mark is not enough.", true)
+          return
+        }
+        post("streamlit:setComponentValue", {
+          value: { points, nonce: Date.now() },
+          dataType: "json",
+        })
+      })
+      canvas.addEventListener("pointerdown", onDown)
+      canvas.addEventListener("pointermove", onMove)
+      canvas.addEventListener("pointerup", onUp)
+      canvas.addEventListener("pointercancel", onUp)
+      canvas.addEventListener("pointerleave", () => {
+        if (!drawing) {
+          cursorPoint = null
+          placeCursor()
+        }
+      })
+      window.addEventListener("resize", resize)
+      new ResizeObserver(resize).observe(canvas)
+      window.addEventListener("message", (event) => {
+        if (event.data && event.data.type === "streamlit:render") fit()
+      })
+      frame.classList.toggle("dark", darkBox.checked)
+      resize()
+      post("streamlit:componentReady", { apiVersion: 1 })
+      fit()
+    </script>
+  </body>
+</html>

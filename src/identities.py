@@ -741,11 +741,8 @@ def identities_practice_html(*, field: str = "all", family: str = "all") -> str:
     #id-drill .eq {{ grid-template-columns: minmax(8rem, 1.1fr) auto minmax(10rem, 1.3fr); }}
   }}
 </style>
-<p class="hint">Pick the matching right-hand side from the menu. Tags mark <b>Math</b> (calculus/precalc),
-<b>Physics</b>, <b>EE</b>, and <b>ME</b>. From Paul: y = sin<sup>−1</sup>(x) is equivalent to x = sin(y).
-Alternate notation: sin<sup>−1</sup>(x) = arcsin(x), not 1/sin.
-On a phone, one identity at a time — use Previous / Next.
-Check grades every blank in this filter.</p>
+<p class="hint">Pick the matching right-hand side. On a phone, use Previous / Next.
+sin<sup>−1</sup> means arcsin, not 1/sin.</p>
 <div class="bar">
   <button type="button" class="primary" id="id-check">Check</button>
   <button type="button" id="id-reveal">Reveal</button>

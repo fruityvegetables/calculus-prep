@@ -41,6 +41,7 @@ from src.identities import (
     grouped_identities,
 )
 from src.figures import figure_for
+from src.handwriting import handwriting_pad
 from src.plots import (
     unit_circle_figure,
     unit_circle_practice_html,
@@ -75,10 +76,14 @@ if "progress" not in st.session_state:
     st.session_state.progress = empty_progress()
 if "page" not in st.session_state:
     st.session_state.page = "Home"
-elif st.session_state.page == "Flashcards":
-    st.session_state.page = "Formula flashcards"
-if st.session_state.get("main-nav") == "Flashcards":
-    st.session_state["main-nav"] = "Formula flashcards"
+elif st.session_state.page == "Formula flashcards":
+    st.session_state.page = "Flashcards"
+elif st.session_state.page == "Extra practice":
+    st.session_state.page = "Extra"
+if st.session_state.get("main-nav") == "Formula flashcards":
+    st.session_state["main-nav"] = "Flashcards"
+if st.session_state.get("main-nav") == "Extra practice":
+    st.session_state["main-nav"] = "Extra"
 if "diag" not in st.session_state:
     st.session_state.diag = _empty_diag()
 if "study" not in st.session_state:
@@ -118,38 +123,43 @@ PAGES = [
     "Physics",
     "Unit circle",
     "Identities",
-    "Formula flashcards",
-    "Extra practice",
+    "Flashcards",
+    "Extra",
     "Progress",
 ]
 
-MOBILE_CSS = """
+APP_CSS = """
 <style>
   .stApp { overflow-x: hidden; }
+  [data-testid="stSidebar"],
+  [data-testid="stSidebarCollapsedControl"],
+  [data-testid="stSidebarCollapseButton"] { display: none !important; }
   [data-testid="stMainBlockContainer"] {
-    padding-top: 0.6rem;
-    padding-left: max(0.7rem, env(safe-area-inset-left));
-    padding-right: max(0.7rem, env(safe-area-inset-right));
-    padding-bottom: max(1.2rem, env(safe-area-inset-bottom));
-    max-width: 100%;
+    padding-top: 0.85rem;
+    padding-left: max(0.85rem, env(safe-area-inset-left));
+    padding-right: max(0.85rem, env(safe-area-inset-right));
+    padding-bottom: max(1.4rem, env(safe-area-inset-bottom));
+    max-width: min(960px, 100%);
+    margin-left: auto;
+    margin-right: auto;
   }
   @media (min-width: 768px) {
     [data-testid="stMainBlockContainer"] {
-      padding-left: 2rem;
-      padding-right: 2rem;
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
     }
   }
-  h1 { font-size: 1.55rem !important; line-height: 1.25 !important; }
-  h2 { font-size: 1.25rem !important; }
-  h3 { font-size: 1.1rem !important; }
+  h1 { font-size: 1.7rem !important; line-height: 1.2 !important; letter-spacing: -0.02em; margin-bottom: 0.35rem !important; }
+  h2 { font-size: 1.2rem !important; }
+  h3 { font-size: 1.05rem !important; }
   @media (min-width: 768px) {
-    h1 { font-size: 2.15rem !important; }
-    h2 { font-size: 1.5rem !important; }
+    h1 { font-size: 1.95rem !important; }
   }
+  [data-testid="stCaptionContainer"] { color: #9aa8bc !important; }
   .stButton button, .stDownloadButton button, .stFormSubmitButton button {
     min-height: 44px;
     width: 100%;
-    font-size: 1rem !important;
+    font-size: 0.98rem !important;
     touch-action: manipulation;
   }
   .stTextInput input, .stNumberInput input, .stSelectbox input,
@@ -180,37 +190,23 @@ MOBILE_CSS = """
     }
   }
   @media (max-width: 768px) {
-    [data-testid="stHeader"],
-    [data-testid="stSidebar"],
-    [data-testid="stSidebarCollapsedControl"],
-    [data-testid="stSidebarCollapseButton"] { display: none !important; }
-    [data-testid="stMainBlockContainer"] { padding-top: 0.75rem; }
+    [data-testid="stHeader"] { display: none !important; }
+    [data-testid="stMainBlockContainer"] { padding-top: 0.7rem; }
   }
-  [data-testid="stButtonGroup"] { flex-wrap: wrap !important; }
+  [data-testid="stButtonGroup"] { flex-wrap: wrap !important; gap: 0.35rem !important; justify-content: flex-start !important; }
+  [data-testid="stButtonGroup"] button { min-height: 38px; width: auto !important; flex: 0 0 auto !important; }
   .stMarkdown, .stCaption, .stAlert { overflow-wrap: anywhere; word-break: break-word; }
   [data-testid="stExpander"] summary { min-height: 44px; }
+  [data-testid="stAlert"] { margin-top: 0.4rem; margin-bottom: 0.4rem; }
 </style>
 """
 
 
-def inject_mobile_css() -> None:
-    st.markdown(MOBILE_CSS, unsafe_allow_html=True)
+def inject_app_css() -> None:
+    st.markdown(APP_CSS, unsafe_allow_html=True)
 
 
 def render_nav() -> None:
-    with st.sidebar:
-        st.title("Calc 1 prep")
-        for name in PAGES:
-            if st.button(
-                name,
-                key=f"navbtn-{name}",
-                use_container_width=True,
-                type="primary" if st.session_state.page == name else "secondary",
-            ):
-                st.session_state.page = name
-                st.session_state["main-nav"] = name
-                st.rerun()
-
     if "main-nav" not in st.session_state:
         st.session_state["main-nav"] = st.session_state.page
 
@@ -221,7 +217,7 @@ def render_nav() -> None:
         selection_mode="single",
         required=True,
         wrap=True,
-        width="stretch",
+        width="content",
         label_visibility="collapsed",
     )
     if picked != st.session_state.page:
@@ -284,10 +280,10 @@ def _safe_problem(skill, seed):
 
 
 def show_skill_lesson(skill, *, openstax: bool = False) -> None:
-    with st.expander("Lesson — read this before you try", expanded=True):
+    with st.expander("Lesson"):
         st.markdown(skill.lesson)
         if openstax and skill.openstax_url:
-            st.markdown(f"[Optional textbook reading: OpenStax]({skill.openstax_url})")
+            st.markdown(f"[OpenStax reading]({skill.openstax_url})")
 
 
 def show_solution(problem: Problem) -> None:
@@ -305,16 +301,25 @@ def problem_card(problem: Problem, key_prefix: str, on_check, skill=None) -> Non
     if skill is not None:
         show_skill_lesson(skill, openstax=True)
     st.markdown(problem.prompt)
-    if problem.steps:
-        st.info(
-            f"**How to start this problem — {problem.steps[0].title}.** "
-            f"{problem.steps[0].text}"
+    answer_key = f"{key_prefix}-answer"
+    nonce_key = f"{key_prefix}-ink-nonce"
+    answer_slot = st.container()
+    pad_slot = st.container()
+    if problem.plot != "sketch":
+        with pad_slot:
+            st.caption("Write the answer, then **Read as answer**. Edit the box if the reading is off.")
+            ink = handwriting_pad(key=f"{key_prefix}-ink")
+            if ink and ink.get("expression"):
+                nonce = ink.get("nonce")
+                if nonce != st.session_state.get(nonce_key):
+                    st.session_state[nonce_key] = nonce
+                    st.session_state[answer_key] = ink["expression"]
+    with answer_slot:
+        student = st.text_input(
+            "Your answer",
+            key=answer_key,
+            placeholder="Type here, or write below and tap Read as answer",
         )
-    student = st.text_input(
-        "Your answer",
-        key=f"{key_prefix}-answer",
-        placeholder="Fractions, sqrt(), pi, and lists like -3, 5 are all OK",
-    )
     cols = st.columns(3)
     with cols[0]:
         if st.button("Check", key=f"{key_prefix}-check", use_container_width=True):
@@ -323,120 +328,65 @@ def problem_card(problem: Problem, key_prefix: str, on_check, skill=None) -> Non
     with cols[1]:
         show_hint = st.button("Hint", key=f"{key_prefix}-hint", use_container_width=True)
     with cols[2]:
-        show_sol = st.button(
-            "Show step-by-step",
-            key=f"{key_prefix}-sol",
-            use_container_width=True,
-        )
+        show_sol = st.button("Steps", key=f"{key_prefix}-sol", use_container_width=True)
     fig = figure_for(problem.plot, problem.plot_data)
     if fig is not None:
         st.pyplot(fig, clear_figure=True, width="stretch")
     if show_hint:
         st.info(problem.hint)
     if show_sol:
-        with st.expander("Complete solution (meant for a long time away from math)", expanded=True):
+        with st.expander("Solution", expanded=True):
             show_solution(problem)
 
 
 def page_home() -> None:
-    st.title("Algebra, trigonometry, and precalculus")
-    st.markdown(
-        "Built for people coming back to math after a long break — including "
-        "returning engineering students aiming at Calculus 1. Every in-app "
-        "problem has a final answer **and** a walkthrough that names the goal, "
-        "explains *why*, shows each algebra line, and flags a common mistake."
+    st.title("Calc 1 prep")
+    st.caption(
+        "Algebra, trig, and precalculus for coming back after a long break. "
+        "Every problem has a checkable answer and a walkthrough."
     )
-    st.subheader("How the diagnostic decides where you start")
-    st.markdown(
-        """
-The diagnostic is a **placement test**, not a grade. It looks for the
-*earliest* gap so you do not waste weeks redoing algebra you still have,
-and so you do not jump into trig while factoring is still shaky.
 
-1. **Four stages.** The full **Placement** form has eight questions per stage.
-   Three shorter retake forms (**Midway check**, **End of studies**, **Anytime
-   retake**) have three new questions per stage, so a later take is not the
-   same test again.
-2. **Stage 1 — Algebra foundations.** Order of operations, exponents,
-   radicals, factoring, rational expressions, linear and quadratic
-   equations, inequalities. If this stage is weak, stop here.
-3. **Stage 2 — College algebra and functions.** Function notation,
-   domain, composition, transformations, inverses, parabolas, logs and
-   exponentials (CLEP College Algebra / AP Precalculus Units 1–2).
-4. **Stage 3 — Trigonometry.** Radians, the unit circle, right triangles,
-   period, inverse sine, identities, solving, triangle angles. This is
-   the usual rusty spot.
-5. **Stage 4 — Precalculus extras.** Systems, conics, polar coordinates,
-   sequences, binomial theorem, a limit, vectors, matrices.
+    start, practice = st.columns(2)
+    with start:
+        st.markdown("**Place yourself**")
+        st.button(
+            "Placement test",
+            type="primary",
+            on_click=_go,
+            args=("Diagnostic",),
+            use_container_width=True,
+        )
+        st.caption("Finds the earliest gap. Not a grade.")
+    with practice:
+        st.markdown("**Practice**")
+        st.button("Study a skill", on_click=_go, args=("Study",), use_container_width=True)
+        st.button("Extra drill", on_click=_go, args=("Extra",), use_container_width=True)
+        st.button("Physics 1 & 2", on_click=_go, args=("Physics",), use_container_width=True)
 
-You need about **70% on a Placement stage** (or **2 of 3** on a retake
-form) to unlock the next one. Below that, the app **stops** and places
-you at the first missed skill in that stage. Passing a stage still
-records every miss, so one rusty topic does not disappear.
+    st.markdown("**Memorize**")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.button("Unit circle", on_click=_go, args=("Unit circle",), use_container_width=True)
+    with c2:
+        st.button("Identities", on_click=_go, args=("Identities",), use_container_width=True)
+    with c3:
+        st.button("Flashcards", on_click=_go, args=("Flashcards",), use_container_width=True)
 
-Take Placement first. Retake with a different form midway, at the end
-of your studies, or anytime — including another start-of-studies pass.
+    with st.expander("How placement works"):
+        st.markdown(
+            """
+The diagnostic looks for the **earliest** gap so you do not redo algebra you
+still have, and so you do not jump into trig with shaky factoring.
 
-There is no AP Algebra or AP Trigonometry exam. After you rebuild these
-three courses, the credit exams are **CLEP College Algebra**, **CLEP
-Precalculus**, and **AP Precalculus**.
+- **Placement** — 8 questions per stage (32 total). Take this first.
+- **Midway / End / Anytime** — 3 new questions per stage. Same levels, different items.
+- **Pass a stage** to continue: about 70% on Placement, or 2 of 3 on a retake.
+- If a stage is below that, it **stops** and places you at the first missed skill.
+
+Credit exams after this rebuild: **CLEP College Algebra**, **CLEP Precalculus**,
+and **AP Precalculus**.
 """
-    )
-    st.button(
-        "Open the diagnostic — placement or a retake form",
-        type="primary",
-        on_click=_go,
-        args=("Diagnostic",),
-        use_container_width=True,
-    )
-    st.subheader("Study without the test")
-    st.markdown(
-        "Jump straight into in-app problems. **Precalculus (full course)** is the "
-        "complete path (functions, polynomials, exp/log, trig, polar, conics, "
-        "sequences, limits) — not only the leftover extras."
-    )
-    st.markdown(
-        "Skills marked **Calc 1**, **EE**, and **ME** are the ones that show up "
-        "constantly in calculus and in electrical or mechanical coursework — "
-        "not every topic, only the high-leverage ones. Extra practice can drill "
-        "those pools on their own."
-    )
-    st.button(
-        "Open Study — pick a skill and get a problem",
-        on_click=_go,
-        args=("Study",),
-        use_container_width=True,
-    )
-    st.button(
-        "Physics 1 & 2 practice — AP algebra-based, with hints and solutions",
-        on_click=_go,
-        args=("Physics",),
-        use_container_width=True,
-    )
-    st.button(
-        "Memorize the unit circle — labeled diagram + fill-in drill",
-        on_click=_go,
-        args=("Unit circle",),
-        use_container_width=True,
-    )
-    st.button(
-        "Memorize trig identities — Math, Physics, EE, or ME",
-        on_click=_go,
-        args=("Identities",),
-        use_container_width=True,
-    )
-    st.button(
-        "Formula flashcards — Math, Physics, EE, or ME",
-        on_click=_go,
-        args=("Formula flashcards",),
-        use_container_width=True,
-    )
-    st.button(
-        "Open Extra practice — mixed drill with answers",
-        on_click=_go,
-        args=("Extra practice",),
-        use_container_width=True,
-    )
+        )
 
 
 def _diag_history_lines() -> None:
@@ -464,29 +414,29 @@ def _save_diagnostic(diag: dict, rec: dict) -> None:
 
 
 def page_diagnostic() -> None:
-    st.title("Placement diagnostic")
+    st.title("Diagnostic")
     diag = st.session_state.diag
     if not diag.get("set_id") and not diag.get("finished"):
-        st.markdown(
-            "Four independent forms, same four stages. **Placement** is the full "
-            "32-question test. The other three each have **three new questions per "
-            "stage**, so you can check in midway, at the end of your studies, or "
-            "anytime without repeating the same items."
+        st.caption(
+            "Placement first (8 per stage). The others are shorter retakes with new questions."
         )
         _diag_history_lines()
-        for set_id in SET_ORDER:
-            dset = set_by_id(set_id)
-            st.subheader(dset.title)
-            st.caption(dset.when)
-            st.markdown(dset.blurb)
-            st.button(
-                f"Start {dset.title} — {dset.n_per_stage} questions per stage",
-                key=f"diag-start-{set_id}",
-                type="primary" if set_id == "placement" else "secondary",
-                on_click=_start_diagnostic,
-                args=(set_id,),
-                use_container_width=True,
-            )
+        for row in (SET_ORDER[:2], SET_ORDER[2:]):
+            cols = st.columns(2)
+            for set_id, col in zip(row, cols):
+                dset = set_by_id(set_id)
+                with col:
+                    with st.container(border=True):
+                        st.markdown(f"**{dset.title}**")
+                        st.caption(f"{dset.n_per_stage} per stage · {dset.when}")
+                        st.button(
+                            "Start",
+                            key=f"diag-start-{set_id}",
+                            type="primary" if set_id == "placement" else "secondary",
+                            on_click=_start_diagnostic,
+                            args=(set_id,),
+                            use_container_width=True,
+                        )
         return
 
     dset = set_by_id(diag.get("set_id"))
@@ -526,16 +476,11 @@ def page_diagnostic() -> None:
     items = problems_for_stage(stage, dset.id)
     index = diag["index"]
     meta = next(s for s in STAGES if s["stage"] == stage)
-    st.progress((stage - 1) / 4, text=f"{dset.title} · Stage {stage} of 4 — {meta['title']}")
-    st.caption(
-        f"{meta['why']} Need {int(pass_ratio * 100)}% on this stage to continue "
-        f"({dset.n_per_stage} questions here)."
-    )
+    st.progress((stage - 1) / 4, text=f"{dset.title} · Stage {stage} of 4")
+    st.caption(f"{meta['title']} · {int(pass_ratio * 100)}% to continue · {index + 1} of {len(items)}")
     if index >= len(items):
         st.stop()
     problem = items[index]
-    st.markdown(f"**Question {index + 1} of {len(items)}** · skill: `{problem.skill_id}`")
-    diag_skill = skill_by_id(problem.skill_id)
 
     def on_check(ok: bool, _student: str) -> None:
         diag["awaiting"] = False
@@ -549,9 +494,9 @@ def page_diagnostic() -> None:
         st.session_state.diag = diag
 
     if diag["awaiting"]:
-        problem_card(problem, f"diag-{dset.id}-{stage}-{index}", on_check, skill=diag_skill)
+        problem_card(problem, f"diag-{dset.id}-{stage}-{index}", on_check)
         st.button(
-            "Abandon and pick another form",
+            "Quit this form",
             on_click=_abandon_diagnostic,
             use_container_width=True,
         )
@@ -560,7 +505,7 @@ def page_diagnostic() -> None:
             st.success("Correct.")
         else:
             st.error(f"Not quite. Target form: {problem.answer_display}")
-        with st.expander("Complete solution", expanded=not diag["last_correct"]):
+        with st.expander("Solution", expanded=not diag["last_correct"]):
             show_solution(problem)
         if st.button("Next", type="primary", use_container_width=True):
             next_index = index + 1
@@ -596,14 +541,16 @@ def page_study() -> None:
         st.session_state.study["unit"] = unit_id
 
     track_ids = [t.id for t in TRACKS]
-    course_id = st.selectbox(
-        "Course",
-        track_ids,
-        index=track_ids.index(st.session_state.study["course"])
-        if st.session_state.study.get("course") in track_ids
-        else 2,
-        format_func=lambda tid: track_by_id(tid).title if track_by_id(tid) else tid,
-    )
+    col_c, col_u, col_s = st.columns(3)
+    with col_c:
+        course_id = st.selectbox(
+            "Course",
+            track_ids,
+            index=track_ids.index(st.session_state.study["course"])
+            if st.session_state.study.get("course") in track_ids
+            else 2,
+            format_func=lambda tid: track_by_id(tid).title if track_by_id(tid) else tid,
+        )
     if course_id != st.session_state.study.get("course"):
         track = track_by_id(course_id)
         st.session_state.study["course"] = course_id
@@ -616,22 +563,18 @@ def page_study() -> None:
     track = track_by_id(course_id)
     if track is None:
         st.stop()
-    st.caption(track.blurb)
-    st.caption(
-        "Tags: **Calc 1** = used constantly in calculus. **EE** = electrical. "
-        "**ME** = mechanical. Untagged skills are still useful prerequisites."
-    )
 
     unit_ids = [u.id for u in track.units]
     current_unit = st.session_state.study.get("unit")
     if current_unit not in unit_ids:
         current_unit = unit_ids[0]
-    unit_id = st.selectbox(
-        "Unit",
-        unit_ids,
-        index=unit_ids.index(current_unit),
-        format_func=lambda uid: next(u.title for u in track.units if u.id == uid),
-    )
+    with col_u:
+        unit_id = st.selectbox(
+            "Unit",
+            unit_ids,
+            index=unit_ids.index(current_unit),
+            format_func=lambda uid: next(u.title for u in track.units if u.id == uid),
+        )
     if unit_id != st.session_state.study.get("unit"):
         unit = next(u for u in track.units if u.id == unit_id)
         st.session_state.study["unit"] = unit_id
@@ -650,14 +593,15 @@ def page_study() -> None:
             st.session_state.study["unit"] = found_unit
             st.rerun()
         current = skill_ids[0]
-    chosen = st.selectbox(
-        "Skill",
-        skill_ids,
-        index=skill_ids.index(current),
-        format_func=lambda sid: (
-            format_skill_title(skill_by_id(sid)) if skill_by_id(sid) else sid
-        ),
-    )
+    with col_s:
+        chosen = st.selectbox(
+            "Skill",
+            skill_ids,
+            index=skill_ids.index(current),
+            format_func=lambda sid: (
+                format_skill_title(skill_by_id(sid)) if skill_by_id(sid) else sid
+            ),
+        )
     if chosen != st.session_state.study["skill_id"]:
         st.session_state.study["skill_id"] = chosen
         st.session_state.study["problem"] = None
@@ -670,9 +614,8 @@ def page_study() -> None:
 
     why = relevance_line(skill)
     if why:
-        st.info(why)
+        st.caption(why)
 
-    st.subheader("Practice problem")
     if st.session_state.study["problem"] is None:
         st.session_state.study["problem"] = _safe_problem(
             skill, st.session_state.study["seed"]
@@ -704,15 +647,8 @@ def page_study() -> None:
 
 
 def page_extra() -> None:
-    st.title("Extra practice")
-    st.markdown(
-        "Mixed in-app problems with the same Check / Hint / step-by-step tools. "
-        "Pick a course or shuffle everything. **Precalculus** is the full AP/CLEP "
-        "path (functions, polynomials, exp/log, trig, polar, conics, sequences, "
-        "limits), not only polar and matrices. **Physics 1** and **Physics 2** are "
-        "algebra-based AP-level intro physics. **Calc 1 priority**, **Electrical "
-        "engineering**, and **Mechanical engineering** drill only the tagged skills."
-    )
+    st.title("Extra")
+    st.caption("Random problems from the pool you pick. Same Check / Hint / Steps as Study.")
     course = st.selectbox(
         "Pool",
         [
@@ -775,10 +711,10 @@ def page_extra() -> None:
         st.error("Could not load a problem.")
         return
 
-    st.caption(f"Skill: {format_skill_title(skill)}")
+    st.caption(format_skill_title(skill))
     why = relevance_line(skill)
     if why:
-        st.info(why)
+        st.caption(why)
 
     def on_check(ok: bool, _student: str) -> None:
         st.session_state.extra["checked"] = True
@@ -800,21 +736,13 @@ def page_extra() -> None:
 
 
 def page_physics() -> None:
-    st.title("Physics 1 & 2")
-    st.markdown(
-        "Algebra-based **AP Physics 1** (mechanics, waves, simple circuits) and "
-        "**AP Physics 2** (fluids, thermo, E&M, optics, photons). Same depth as a "
-        "one-year college intro sequence — no calculus. Every problem has a lesson, "
-        "a hint, and a full walkthrough. Take $g = 10\\,\\mathrm{m/s^2}$ when a "
-        "problem uses gravity. Enter the number the prompt asks for; units are in the question."
-    )
+    st.title("Physics")
     st.caption(
-        "Optional reading: [OpenStax College Physics 2e](https://openstax.org/books/college-physics-2e/). "
-        "You can also open **Study**, pick course **Physics 1 & 2**, and drill one skill at a time."
+        "Algebra-based AP 1 & 2. Use $g = 10\\,\\mathrm{m/s^2}$ when gravity appears."
     )
     pool_label = st.pills(
-        "Exam slice",
-        ["Physics 1", "Physics 2", "Mixed P1 + P2"],
+        "Pool",
+        ["Physics 1", "Physics 2", "Mixed"],
         default="Physics 1",
         key="phy-pool",
         wrap=True,
@@ -835,7 +763,6 @@ def page_physics() -> None:
     else:
         wanted = physics_skill_ids()
     pool = [s for s in all_skills() if s.id in wanted]
-    st.caption(f"{len(pool)} skills in this slice. Check / Hint / Show step-by-step work the same as Study.")
 
     if st.session_state.physics["problem"] is None:
         rng = random.Random(st.session_state.physics["seed"])
@@ -851,10 +778,10 @@ def page_physics() -> None:
         st.error("Could not load a physics problem.")
         return
 
-    st.caption(f"Skill: {format_skill_title(skill)}")
+    st.caption(format_skill_title(skill))
     why = relevance_line(skill)
     if why:
-        st.info(why)
+        st.caption(why)
 
     def on_check(ok: bool, _student: str) -> None:
         st.session_state.physics["checked"] = True
@@ -881,21 +808,8 @@ def page_physics() -> None:
 
 
 def page_flashcards() -> None:
-    st.title("Formula flashcards")
-    st.markdown(
-        "Memorize **formulas** and **trig identities** the same way you filter practice: "
-        "**Math**, **Physics**, **EE**, or **ME**. Tap **Flip** after you try to recall the "
-        "right-hand side. Graphs are not on these cards — just the equation."
-    )
-    st.caption(
-        "Trig identity cards are the same catalog as the Identities tab "
-        "(Paul’s cheat sheet plus Euler and components), including both reciprocal directions, "
-        "cot period, inverse trig copied from Paul’s Inverse Trig Functions "
-        "(definition, domain/range inequalities, inverse properties, alternate notation "
-        "sin⁻¹(x) = arcsin(x)), and all triangle laws. "
-        "Algebra, precalc, and algebra-based Physics 1 & 2 formulas sit in the other families. "
-        "In-app physics always uses $g = 10\\,\\mathrm{m/s^2}$ when gravity appears."
-    )
+    st.title("Flashcards")
+    st.caption("Recall the right-hand side, then Flip. Filter by field or family.")
     field_label = st.pills(
         "Field",
         ["All fields", "Math", "Physics", "EE", "ME"],
@@ -928,7 +842,7 @@ def page_flashcards() -> None:
     cards = flashcards_for(field=field, family=family)
     st.caption(f"{len(cards)} cards in this filter.")
     if not cards:
-        st.info("No formula flashcards in this mix. Try All fields or another family.")
+        st.info("Nothing in this mix. Try All fields or another family.")
         return
 
     filt = f"{field}:{family}"
@@ -955,7 +869,7 @@ def page_flashcards() -> None:
         st.markdown(f"### {card.name}")
         if not flash["flipped"]:
             st.markdown(card.front)
-            st.caption("Recall the formula, then Flip.")
+            st.caption("Then Flip.")
         else:
             st.latex(card.back_tex)
             st.markdown(card.why)
@@ -993,7 +907,7 @@ def page_progress() -> None:
         st.markdown(f"**Last diagnostic ({form}):** {rec.get('start_title')}")
         st.markdown(rec.get("headline", ""))
     else:
-        st.markdown("No diagnostic saved in this session yet.")
+        st.caption("No diagnostic in this session yet.")
     if len(history) > 1:
         st.markdown("**All takes this session**")
         for item in reversed(history):
@@ -1014,47 +928,36 @@ def page_progress() -> None:
 
 def page_unit_circle() -> None:
     st.title("Unit circle")
-    st.markdown(
-        "On the unit circle, **cosine is the x-coordinate** and **sine is the y-coordinate**. "
-        "Memorize the 16 special angles: degrees, radians, and the point "
-        r"$(\cos\theta,\ \sin\theta)$. Signs follow **ASTC** (All Students Take Calculus): "
-        "all positive in Q1, sine in Q2, tangent in Q3, cosine in Q4."
-    )
-    tab_ref, tab_practice = st.tabs(["Labeled reference", "Fill it in"])
+    st.caption("Cosine is x, sine is y. Sixteen special angles.")
+    tab_ref, tab_practice = st.tabs(["Look", "Fill in"])
     with tab_ref:
-        st.caption("Every standard angle with degrees, radians, and coordinates. Scroll sideways on a phone if the labels feel small.")
         st.pyplot(
             unit_circle_figure(labeled=True, size=6.8),
             clear_figure=True,
             width="stretch",
         )
-        with st.expander("The same 16 points as a table (easy on a phone)", expanded=True):
+        with st.expander("Table"):
             st.markdown(unit_circle_value_table())
     with tab_practice:
-        st.caption(
-            "Hide a piece of the diagram and pick the matching value from each menu. On a phone, "
-            "tap a point or pick it from the list, then use the dropdowns in the card below. "
-            "Check grades your choices; Reveal fills them so you can study, then Clear and try again."
-        )
         mode_label = st.pills(
             "What to fill in",
             [
-                "Coordinates (x = cos, y = sin)",
+                "Coordinates",
                 "Radians",
                 "Degrees",
                 "Everything",
             ],
-            default="Coordinates (x = cos, y = sin)",
+            default="Coordinates",
             key="uc-mode",
             wrap=True,
             width="stretch",
         )
         mode = {
-            "Coordinates (x = cos, y = sin)": "coordinates",
+            "Coordinates": "coordinates",
             "Radians": "radians",
             "Degrees": "degrees",
             "Everything": "all",
-        }.get(mode_label or "Coordinates (x = cos, y = sin)", "coordinates")
+        }.get(mode_label or "Coordinates", "coordinates")
         components.html(
             unit_circle_practice_html(mode),
             height=980,
@@ -1063,23 +966,10 @@ def page_unit_circle() -> None:
 
 
 def page_identities() -> None:
-    st.title("Trig identities")
-    st.markdown(
-        "Memorize the identities you will actually use in **calculus**, **physics**, "
-        "**electrical engineering**, and **mechanical engineering**. Each formula is "
-        "tagged by field — filter the list, then fill the right-hand side from a menu "
-        "the same way as the unit-circle drill."
-    )
+    st.title("Identities")
     st.caption(
-        "Coverage matches the standard trig identity list "
-        "([Paul's Online Notes cheat sheet](https://tutorial.math.lamar.edu/pdf/Trig_Cheat_Sheet.pdf)), "
-        "including both directions of the reciprocal identities, cotangent’s period π, "
-        "inverse trig copied from Paul’s Inverse Trig Functions "
-        "(y = sin⁻¹(x) equivalent to x = sin(y); domain/range inequalities; "
-        "inverse properties; sin⁻¹(x) = arcsin(x)), and all cyclic triangle laws "
-        "(sines, three cosines, three tangents, Mollweide). "
-        "The layout, field tags, and drill are ours. Euler’s formula and vector components "
-        "are included because they are the everyday EE / physics / ME forms of cosine and sine."
+        "Filter by field, then read or fill in the right-hand side. "
+        "Catalog follows [Paul’s cheat sheet](https://tutorial.math.lamar.edu/pdf/Trig_Cheat_Sheet.pdf)."
     )
     field_label = st.pills(
         "Field",
@@ -1096,17 +986,13 @@ def page_identities() -> None:
         "EE": "ee",
         "ME": "me",
     }.get(field_label or "All fields", "all")
-    n_field = len(identities_for(field=field))
-    st.caption(f"{n_field} identities in this field filter.")
-    tab_ref, tab_practice = st.tabs(["Labeled reference", "Fill it in"])
+    tab_ref, tab_practice = st.tabs(["Look", "Fill in"])
     with tab_ref:
-        st.caption("Read the formula, the field tags, and why it shows up in that work.")
         for family_name, rows in grouped_identities(field):
-            with st.expander(f"{family_name} · {len(rows)}", expanded=True):
+            with st.expander(f"{family_name} · {len(rows)}"):
                 for item in rows:
-                    tags = " · ".join(f"**{label}**" for label in item.field_labels())
                     st.markdown(item.labeled_markdown())
-                    st.caption(f"{tags} — {item.why}")
+                    st.caption(item.why)
     with tab_practice:
         family_label = st.pills(
             "Family",
@@ -1121,10 +1007,7 @@ def page_identities() -> None:
             family_label or "All families", "all"
         )
         n_shown = len(identities_for(field=field, family=family))
-        st.caption(
-            f"{n_shown} blanks in this filter. Pick each right-hand side from the menu. "
-            "Check grades the whole list; Reveal fills them so you can study, then Clear."
-        )
+        st.caption(f"{n_shown} to fill. Check the list, or Reveal to study.")
         components.html(
             identities_practice_html(field=field, family=family),
             height=920,
@@ -1132,7 +1015,7 @@ def page_identities() -> None:
         )
 
 
-inject_mobile_css()
+inject_app_css()
 render_nav()
 
 page = st.session_state.page
@@ -1148,9 +1031,9 @@ elif page == "Unit circle":
     page_unit_circle()
 elif page == "Identities":
     page_identities()
-elif page == "Formula flashcards":
+elif page == "Flashcards":
     page_flashcards()
-elif page == "Extra practice":
+elif page == "Extra":
     page_extra()
 else:
     page_progress()

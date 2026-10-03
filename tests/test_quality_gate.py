@@ -444,3 +444,20 @@ def test_graph_skills_ship_a_matching_figure():
     assert figure_for(None) is None
     assert len(FIGURES) >= 40
 
+
+def test_handwriting_pad_has_eraser_and_reader():
+    from pathlib import Path
+
+    from src.handwriting import handwriting_pad
+
+    html = (Path("components") / "handwriting" / "index.html").read_text(encoding="utf-8")
+    assert "Eraser" in html
+    assert "Read as answer" in html
+    assert "eraseAt" in html
+    assert 'id="loads"' in html
+    assert "Loading reader" in html
+    assert "onFileProgress" in html
+    assert "SmolVLM" in html
+    assert "tesseract" not in html.lower()
+    assert callable(handwriting_pad)
+
