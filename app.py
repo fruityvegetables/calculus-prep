@@ -130,18 +130,37 @@ PAGES = [
 
 APP_CSS = """
 <style>
-  .stApp { overflow-x: hidden; }
+  .stApp { overflow-x: clip; }
   [data-testid="stSidebar"],
   [data-testid="stSidebarCollapsedControl"],
   [data-testid="stSidebarCollapseButton"] { display: none !important; }
+  [data-testid="stHeader"] {
+    display: flex !important;
+    background: var(--background-color, #0e1117) !important;
+    z-index: 1000;
+  }
   [data-testid="stMainBlockContainer"] {
-    padding-top: 0.85rem;
+    padding-top: 0.9rem;
     padding-left: max(0.85rem, env(safe-area-inset-left));
     padding-right: max(0.85rem, env(safe-area-inset-right));
     padding-bottom: max(1.4rem, env(safe-area-inset-bottom));
     max-width: min(960px, 100%);
     margin-left: auto;
     margin-right: auto;
+  }
+  [data-testid="stElementContainer"]:has(.app-nav),
+  [data-testid="stVerticalBlockBorderWrapper"]:has(.app-nav) { display: none; }
+  [data-testid="stElementContainer"]:has(.app-nav) + [data-testid="stElementContainer"],
+  [data-testid="stVerticalBlockBorderWrapper"]:has(.app-nav) + [data-testid="stVerticalBlockBorderWrapper"] {
+    position: sticky;
+    top: 4.25rem;
+    z-index: 999;
+    background: var(--background-color, #0e1117);
+    padding-top: 0.7rem;
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.15rem;
+    border-bottom: 1px solid #243044;
+    overflow: visible;
   }
   @media (min-width: 768px) {
     [data-testid="stMainBlockContainer"] {
@@ -189,11 +208,12 @@ APP_CSS = """
       flex: 1 1 100% !important;
     }
   }
-  @media (max-width: 768px) {
-    [data-testid="stHeader"] { display: none !important; }
-    [data-testid="stMainBlockContainer"] { padding-top: 0.7rem; }
+  [data-testid="stButtonGroup"] {
+    flex-wrap: wrap !important;
+    gap: 0.35rem !important;
+    justify-content: flex-start !important;
+    overflow: visible !important;
   }
-  [data-testid="stButtonGroup"] { flex-wrap: wrap !important; gap: 0.35rem !important; justify-content: flex-start !important; }
   [data-testid="stButtonGroup"] button { min-height: 38px; width: auto !important; flex: 0 0 auto !important; }
   .stMarkdown, .stCaption, .stAlert { overflow-wrap: anywhere; word-break: break-word; }
   [data-testid="stExpander"] summary { min-height: 44px; }
@@ -210,6 +230,7 @@ def render_nav() -> None:
     if "main-nav" not in st.session_state:
         st.session_state["main-nav"] = st.session_state.page
 
+    st.markdown('<div class="app-nav"></div>', unsafe_allow_html=True)
     picked = st.pills(
         "Page",
         PAGES,
@@ -217,7 +238,7 @@ def render_nav() -> None:
         selection_mode="single",
         required=True,
         wrap=True,
-        width="content",
+        width="stretch",
         label_visibility="collapsed",
     )
     if picked != st.session_state.page:
