@@ -42,6 +42,7 @@ from src.identities import (
 )
 from src.figures import figure_for
 from src.handwriting import handwriting_pad
+from src.keypad import apply_key
 from src.plots import (
     unit_circle_figure,
     unit_circle_practice_html,
@@ -218,12 +219,252 @@ APP_CSS = """
   .stMarkdown, .stCaption, .stAlert { overflow-wrap: anywhere; word-break: break-word; }
   [data-testid="stExpander"] summary { min-height: 44px; }
   [data-testid="stAlert"] { margin-top: 0.4rem; margin-bottom: 0.4rem; }
+  .st-key-answer-keypad {
+    max-width: 22rem;
+    margin-top: 0.15rem;
+  }
+  .st-key-answer-keypad [data-testid="stVerticalBlock"] {
+    gap: 0.35rem !important;
+  }
+  .st-key-answer-keypad [data-testid="stHorizontalBlock"] {
+    flex-wrap: nowrap !important;
+    gap: 0.35rem !important;
+  }
+  .st-key-answer-keypad [data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
+    min-width: 0 !important;
+    width: auto !important;
+    flex: 1 1 0 !important;
+  }
+  .st-key-answer-keypad .stButton button {
+    min-height: 44px;
+    padding-left: 0.15rem;
+    padding-right: 0.15rem;
+    font-size: 1.05rem !important;
+  }
+  .st-key-answer-actions {
+    max-width: 22rem;
+  }
+  .st-key-answer-actions [data-testid="stVerticalBlock"] {
+    gap: 0.35rem !important;
+  }
+  .st-key-answer-actions [data-testid="stHorizontalBlock"] {
+    flex-wrap: nowrap !important;
+    gap: 0.35rem !important;
+  }
+  .st-key-answer-actions [data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
+    min-width: 0 !important;
+    width: auto !important;
+    flex: 1 1 0 !important;
+  }
+  .stElementContainer[class*="st-key-"][class*="-check"] button,
+  .stElementContainer[class*="st-key-"][class*="-hint"] button,
+  .stElementContainer[class*="st-key-"][class*="-sol"] button,
+  .stElementContainer[class*="st-key-"][class*="-new"] button {
+    position: relative;
+    overflow: hidden;
+    padding-right: 1.65rem !important;
+  }
+  .stElementContainer[class*="st-key-"][class*="-check"] button::before,
+  .stElementContainer[class*="st-key-"][class*="-hint"] button::before,
+  .stElementContainer[class*="st-key-"][class*="-sol"] button::before,
+  .stElementContainer[class*="st-key-"][class*="-new"] button::before {
+    position: absolute;
+    right: 0.22rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.35rem;
+    line-height: 1;
+    opacity: 0.92;
+    pointer-events: none;
+    z-index: 0;
+    font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+  }
+  .stElementContainer[class*="st-key-"][class*="-check"] button > *,
+  .stElementContainer[class*="st-key-"][class*="-hint"] button > *,
+  .stElementContainer[class*="st-key-"][class*="-sol"] button > *,
+  .stElementContainer[class*="st-key-"][class*="-new"] button > * {
+    position: relative;
+    z-index: 1;
+  }
+  .stElementContainer[class*="st-key-"][class*="-check"] button::before { content: "⬇️"; }
+  .stElementContainer[class*="st-key-"][class*="-hint"] button::before { content: "💡"; }
+  .stElementContainer[class*="st-key-"][class*="-sol"] button::before { content: "🪜"; }
+  .stElementContainer[class*="st-key-"][class*="-new"] button::before { content: "➡️"; }
+  .stButton button:focus-visible,
+  .stDownloadButton button:focus-visible,
+  [data-testid="stButtonGroup"] button:focus-visible {
+    outline: 3px solid #f8fafc !important;
+    outline-offset: 2px !important;
+    box-shadow: 0 0 0 5px #111111 !important;
+  }
+  [data-testid="stLayoutWrapper"]:has(.st-key-app-bar) {
+    position: sticky;
+    top: 4.25rem;
+    z-index: 999;
+    background: var(--background-color, #0e1117);
+  }
+  .st-key-app-bar {
+    background: var(--background-color, #0e1117);
+    padding-top: 0.15rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid #243044;
+  }
+  .st-key-app-bar [data-testid="stVerticalBlock"] { gap: 0.45rem !important; }
+  .st-key-color-vision-menu { max-width: 16rem; margin-bottom: 0.1rem; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 </style>
 """
 
 
+# bg, border, text, hover background, hover border, border style
+_Swatch = tuple[str, str, str, str, str, str]
+
+# Palettes stay apart for that kind of vision. They are not simulations.
+# Green-blind and red-blind share the red/green confusion, but red-blind also
+# darkens reds, so those two sets use different lightness.
+_COLOR_VISION: dict[str, dict[str, _Swatch]] = {
+    "Standard": {
+        "check": ("#14643a", "#1b7a48", "#ffffff", "#1a7a48", "#229456", "solid"),
+        "new": ("#8a1e2d", "#a3283a", "#ffffff", "#a32638", "#bc3146", "solid"),
+        "sol": ("#1a4f92", "#2464b0", "#ffffff", "#215eab", "#2d74c9", "solid"),
+        "hint": ("#e2b000", "#c99700", "#1c1404", "#f0c21a", "#d7a800", "solid"),
+        "key": ("#2f5f86", "#3d729c", "#f4f8fc", "#3a719c", "#4d86b4", "solid"),
+        "key_down": ("#274f70", "#32648a", "#ffffff", "#274f70", "#32648a", "solid"),
+        "ok": ("#123d28", "#3dcea0", "#e9fff2", "#123d28", "#3dcea0", "solid"),
+        "bad": ("#4a1520", "#ff8fa0", "#ffe8ec", "#4a1520", "#ff8fa0", "solid"),
+    },
+    "Green-blind": {
+        "check": ("#0b4f9c", "#1a66c2", "#ffffff", "#1464c0", "#2a78d4", "solid"),
+        "new": ("#c45c00", "#e07012", "#ffffff", "#d66a08", "#f08420", "solid"),
+        "sol": ("#5b2c8a", "#7340a8", "#ffffff", "#6c38a4", "#8554bc", "solid"),
+        "hint": ("#f0c400", "#d7ae00", "#1c1404", "#ffd24a", "#e0b800", "solid"),
+        "key": ("#1c4558", "#2c647c", "#f4f8fc", "#27586e", "#3a7a94", "solid"),
+        "key_down": ("#163644", "#245066", "#ffffff", "#163644", "#245066", "solid"),
+        "ok": ("#0c2f55", "#7eb6ff", "#e7f1ff", "#0c2f55", "#7eb6ff", "solid"),
+        "bad": ("#4a2a08", "#ffb15a", "#fff1e0", "#4a2a08", "#ffb15a", "solid"),
+    },
+    "Red-blind": {
+        "check": ("#0e5f78", "#16809e", "#ffffff", "#14748f", "#1e96b8", "solid"),
+        "new": ("#f0a202", "#ffc14d", "#1c1404", "#ffb423", "#ffd06a", "solid"),
+        "sol": ("#1d4ed8", "#3b6ef0", "#ffffff", "#2a5ce0", "#4d7ef5", "solid"),
+        "hint": ("#ffe56a", "#f5d000", "#1c1404", "#fff09a", "#ffe56a", "solid"),
+        "key": ("#3a4a63", "#516380", "#f4f8fc", "#4a5d7a", "#647898", "solid"),
+        "key_down": ("#2c384c", "#42506a", "#ffffff", "#2c384c", "#42506a", "solid"),
+        "ok": ("#08343f", "#7ee0f2", "#e7fbff", "#08343f", "#7ee0f2", "solid"),
+        "bad": ("#4a3808", "#ffd36a", "#fff6dc", "#4a3808", "#ffd36a", "solid"),
+    },
+    "Blue-yellow": {
+        "check": ("#0f6b3c", "#188a4e", "#ffffff", "#16854a", "#22a35c", "solid"),
+        "new": ("#9b1c2c", "#c12a3e", "#ffffff", "#b42334", "#d43b50", "solid"),
+        "sol": ("#2a2a2e", "#d4d4d8", "#ffffff", "#3a3a40", "#f4f4f5", "solid"),
+        "hint": ("#f4f0e8", "#d6d0c4", "#1c1404", "#fffdf8", "#e7e1d6", "solid"),
+        "key": ("#4b5563", "#6b7280", "#ffffff", "#5c6775", "#9ca3af", "solid"),
+        "key_down": ("#374151", "#4b5563", "#ffffff", "#374151", "#4b5563", "solid"),
+        "ok": ("#0d3320", "#4ade80", "#e9fff2", "#0d3320", "#4ade80", "solid"),
+        "bad": ("#4a1218", "#fb7185", "#ffe4ea", "#4a1218", "#fb7185", "solid"),
+    },
+    "Grayscale": {
+        "check": ("#f4f4f5", "#ffffff", "#111111", "#ffffff", "#e4e4e7", "solid"),
+        "new": ("#18181b", "#d4d4d8", "#ffffff", "#27272a", "#f4f4f5", "dashed"),
+        "sol": ("#52525b", "#a1a1aa", "#ffffff", "#3f3f46", "#d4d4d8", "solid"),
+        "hint": ("#d4d4d8", "#e4e4e7", "#111111", "#e4e4e7", "#f4f4f5", "solid"),
+        "key": ("#3f3f46", "#71717a", "#ffffff", "#52525b", "#a1a1aa", "solid"),
+        "key_down": ("#27272a", "#52525b", "#ffffff", "#27272a", "#52525b", "solid"),
+        "ok": ("#f4f4f5", "#111111", "#111111", "#f4f4f5", "#111111", "solid"),
+        "bad": ("#18181b", "#f4f4f5", "#ffffff", "#18181b", "#f4f4f5", "dashed"),
+    },
+}
+
+
+def _color_mode() -> str:
+    mode = st.session_state.get("color-vision-menu") or st.session_state.get("color-vision") or "Standard"
+    return mode if mode in _COLOR_VISION else "Standard"
+
+
+def _swatch_button(selector: str, swatch: _Swatch) -> str:
+    bg, border, fg, hover_bg, hover_border, style = swatch
+    return f"""
+    {selector} {{
+      background: {bg} !important;
+      border-color: {border} !important;
+      border-style: {style} !important;
+      color: {fg} !important;
+    }}
+    {selector}:hover, {selector}:focus {{
+      background: {hover_bg} !important;
+      border-color: {hover_border} !important;
+      color: {fg} !important;
+    }}
+    {selector} p {{ color: inherit !important; }}
+    """
+
+
+def _color_css(mode: str) -> str:
+    palette = _COLOR_VISION[mode]
+    parts = [
+        "<style>",
+        _swatch_button(
+            '.stElementContainer[class*="st-key-"][class*="-check"] button',
+            palette["check"],
+        ),
+        _swatch_button(
+            '.stElementContainer[class*="st-key-"][class*="-new"] button',
+            palette["new"],
+        ),
+        _swatch_button(
+            '.stElementContainer[class*="st-key-"][class*="-sol"] button',
+            palette["sol"],
+        ),
+        _swatch_button(
+            '.stElementContainer[class*="st-key-"][class*="-hint"] button',
+            palette["hint"],
+        ),
+        _swatch_button(".st-key-answer-keypad .stButton button", palette["key"]),
+        _swatch_button(
+            ".st-key-answer-keypad .stButton button:active",
+            palette["key_down"],
+        ),
+    ]
+    for kind, key in (("ok", "verdict-ok"), ("bad", "verdict-bad")):
+        bg, border, fg, _, _, style = palette[kind]
+        parts.append(
+            f"""
+            .st-key-{key} [data-testid="stAlert"],
+            .st-key-{key} [data-testid="stAlert"] * {{
+              color: {fg} !important;
+            }}
+            .st-key-{key} [data-testid="stAlert"] {{
+              background: {bg} !important;
+              border: 3px {style} {border} !important;
+            }}
+            .st-key-{key} [data-testid="stAlertContainer"] {{
+              background: transparent !important;
+            }}
+            """
+        )
+    parts.append("</style>")
+    return "\n".join(parts)
+
+
 def inject_app_css() -> None:
-    st.markdown(APP_CSS, unsafe_allow_html=True)
+    st.markdown(APP_CSS + _color_css(_color_mode()), unsafe_allow_html=True)
+
+
+def render_color_vision() -> None:
+    if "color-vision-menu" not in st.session_state:
+        previous = st.session_state.get("color-vision")
+        st.session_state["color-vision-menu"] = previous if previous in _COLOR_VISION else "Standard"
+    st.selectbox(
+        "Color vision",
+        list(_COLOR_VISION),
+        key="color-vision-menu",
+        help="Green-blind and red-blind are the common kinds. Blue-yellow is rare. Grayscale uses brightness only. The symbols on the buttons stay the same.",
+    )
 
 
 def render_nav() -> None:
@@ -231,19 +472,21 @@ def render_nav() -> None:
         st.session_state["main-nav"] = st.session_state.page
 
     st.markdown('<div class="app-nav"></div>', unsafe_allow_html=True)
-    picked = st.pills(
-        "Page",
-        PAGES,
-        key="main-nav",
-        selection_mode="single",
-        required=True,
-        wrap=True,
-        width="stretch",
-        label_visibility="collapsed",
-    )
-    if picked != st.session_state.page:
-        st.session_state.page = picked
-        st.rerun()
+    with st.container(key="app-bar"):
+        picked = st.pills(
+            "Page",
+            PAGES,
+            key="main-nav",
+            selection_mode="single",
+            required=True,
+            wrap=True,
+            width="stretch",
+            label_visibility="collapsed",
+        )
+        if picked != st.session_state.page:
+            st.session_state.page = picked
+            st.rerun()
+        render_color_vision()
 
 
 def _go(name: str) -> None:
@@ -318,13 +561,88 @@ def show_solution(problem: Problem) -> None:
             st.markdown(f"- {miss}")
 
 
-def problem_card(problem: Problem, key_prefix: str, on_check, skill=None) -> None:
+_KEYPAD_ROWS: tuple[tuple[tuple[str, str], ...], ...] = (
+    (("7", "7"), ("8", "8"), ("9", "9"), ("÷", "/"), ("⌫", "backspace")),
+    (("4", "4"), ("5", "5"), ("6", "6"), ("×", "*"), ("(", "(")),
+    (("1", "1"), ("2", "2"), ("3", "3"), ("−", "-"), (")", ")")),
+    (("0", "0"), (".", "."), ("x", "x"), ("+", "+"), ("^", "^")),
+    (("√", "sqrt"), ("π", "pi"), (",", ","), ("<", "<"), (">", ">")),
+    (("sin", "sin"), ("cos", "cos"), ("tan", "tan")),
+)
+
+
+def _keypad_press(answer_key: str, token: str) -> None:
+    fill_key = f"{answer_key}-fill"
+    sync_key = f"{answer_key}-sync"
+    edit = apply_key(
+        st.session_state.get(answer_key, "") or "",
+        token,
+        fill=bool(st.session_state.get(fill_key, False)),
+    )
+    st.session_state[answer_key] = edit.text
+    st.session_state[fill_key] = edit.fill
+    st.session_state[sync_key] = edit.text
+
+
+def _sync_answer_edit(answer_key: str) -> None:
+    """Drop the inside-parentheses flag when the box was edited by hand."""
+    fill_key = f"{answer_key}-fill"
+    sync_key = f"{answer_key}-sync"
+    current = st.session_state.get(answer_key, "") or ""
+    if sync_key in st.session_state and st.session_state[sync_key] != current:
+        st.session_state[fill_key] = False
+    st.session_state[sync_key] = current
+
+
+def _answer_keypad(answer_key: str, key_prefix: str) -> None:
+    with st.container(key="answer-keypad"):
+        for row_index, row in enumerate(_KEYPAD_ROWS):
+            columns = st.columns(len(row), gap="small")
+            for col_index, (label, token) in enumerate(row):
+                columns[col_index].button(
+                    label,
+                    key=f"{key_prefix}-key-{row_index}-{col_index}",
+                    on_click=_keypad_press,
+                    args=(answer_key, token),
+                    use_container_width=True,
+                )
+
+
+def _show_verdict(ok: bool, message: str) -> None:
+    mark = "✓" if ok else "✕"
+    with st.container(key="verdict-ok" if ok else "verdict-bad"):
+        if ok:
+            st.success(f"{mark} {message}")
+        else:
+            st.error(f"{mark} {message}")
+
+
+def _answer_verdict(checked: bool, correct: bool | None, wrong: str) -> tuple[bool, str] | None:
+    if not checked:
+        return None
+    if correct:
+        return True, "Correct."
+    return False, wrong
+
+
+def problem_card(
+    problem: Problem,
+    key_prefix: str,
+    on_check,
+    skill=None,
+    *,
+    verdict: tuple[bool, str] | None = None,
+    on_new=None,
+) -> None:
     if skill is not None:
         show_skill_lesson(skill, openstax=True)
     st.markdown(problem.prompt)
     answer_key = f"{key_prefix}-answer"
     nonce_key = f"{key_prefix}-ink-nonce"
+    fill_key = f"{answer_key}-fill"
     answer_slot = st.container()
+    action_slot = st.container()
+    keypad_slot = st.container()
     pad_slot = st.container()
     if problem.plot != "sketch":
         with pad_slot:
@@ -335,21 +653,45 @@ def problem_card(problem: Problem, key_prefix: str, on_check, skill=None) -> Non
                 if nonce != st.session_state.get(nonce_key):
                     st.session_state[nonce_key] = nonce
                     st.session_state[answer_key] = ink["expression"]
+                    st.session_state[fill_key] = False
+    _sync_answer_edit(answer_key)
     with answer_slot:
         student = st.text_input(
             "Your answer",
             key=answer_key,
-            placeholder="Type here, or write below and tap Read as answer",
+            placeholder="Type here, use the keys below, or write and tap Read as answer",
         )
-    cols = st.columns(3)
-    with cols[0]:
-        if st.button("Check", key=f"{key_prefix}-check", use_container_width=True):
-            ok = answers_match(student, problem.answer)
-            on_check(ok, student)
-    with cols[1]:
-        show_hint = st.button("Hint", key=f"{key_prefix}-hint", use_container_width=True)
-    with cols[2]:
-        show_sol = st.button("Steps", key=f"{key_prefix}-sol", use_container_width=True)
+    with action_slot:
+        if verdict is not None:
+            ok, message = verdict
+            _show_verdict(ok, message)
+        if on_new is None:
+            cols = st.columns(3)
+            with cols[0]:
+                if st.button("Submit", key=f"{key_prefix}-check", use_container_width=True):
+                    ok = answers_match(student, problem.answer)
+                    on_check(ok, student)
+                    st.rerun()
+            with cols[1]:
+                show_hint = st.button("Hint", key=f"{key_prefix}-hint", use_container_width=True)
+            with cols[2]:
+                show_sol = st.button("Steps", key=f"{key_prefix}-sol", use_container_width=True)
+        else:
+            with st.container(key="answer-actions"):
+                left, right = st.columns(2, gap="small")
+                with left:
+                    if st.button("Submit", key=f"{key_prefix}-check", use_container_width=True):
+                        ok = answers_match(student, problem.answer)
+                        on_check(ok, student)
+                        st.rerun()
+                    show_hint = st.button("Hint", key=f"{key_prefix}-hint", use_container_width=True)
+                with right:
+                    show_sol = st.button("Steps", key=f"{key_prefix}-sol", use_container_width=True)
+                    if st.button("New problem", key=f"{key_prefix}-new", use_container_width=True):
+                        on_new()
+                        st.rerun()
+    with keypad_slot:
+        _answer_keypad(answer_key, key_prefix)
     fig = figure_for(problem.plot, problem.plot_data)
     if fig is not None:
         st.pyplot(fig, clear_figure=True, width="stretch")
@@ -523,9 +865,9 @@ def page_diagnostic() -> None:
         )
     else:
         if diag["last_correct"]:
-            st.success("Correct.")
+            _show_verdict(True, "Correct.")
         else:
-            st.error(f"Not quite. Target form: {problem.answer_display}")
+            _show_verdict(False, f"Not quite. Target form: {problem.answer_display}")
         with st.expander("Solution", expanded=not diag["last_correct"]):
             show_solution(problem)
         if st.button("Next", type="primary", use_container_width=True):
@@ -653,23 +995,29 @@ def page_study() -> None:
         st.session_state.study["correct"] = ok
         record_attempt(st.session_state.progress, skill.id, ok, problem.id)
 
-    problem_card(problem, f"study-{skill.id}-{st.session_state.study['seed']}", on_check, skill=skill)
-    if st.session_state.study["checked"]:
-        if st.session_state.study["correct"]:
-            st.success("Correct.")
-        else:
-            st.error(f"Not quite. A correct form is {problem.answer_display}")
-    if st.button("New problem", use_container_width=True):
+    def on_new() -> None:
         st.session_state.study["seed"] = random.randint(1, 10**9)
         st.session_state.study["problem"] = None
         st.session_state.study["checked"] = False
         st.session_state.study["correct"] = None
-        st.rerun()
+
+    problem_card(
+        problem,
+        f"study-{skill.id}-{st.session_state.study['seed']}",
+        on_check,
+        skill=skill,
+        verdict=_answer_verdict(
+            st.session_state.study["checked"],
+            st.session_state.study["correct"],
+            f"Not quite. A correct form is {problem.answer_display}",
+        ),
+        on_new=on_new,
+    )
 
 
 def page_extra() -> None:
     st.title("Extra")
-    st.caption("Random problems from the pool you pick. Same Check / Hint / Steps as Study.")
+    st.caption("Random problems from the pool you pick. Same Submit / Hint / Steps as Study.")
     course = st.selectbox(
         "Pool",
         [
@@ -742,18 +1090,24 @@ def page_extra() -> None:
         st.session_state.extra["correct"] = ok
         record_attempt(st.session_state.progress, skill.id, ok, problem.id)
 
-    problem_card(problem, f"extra-{st.session_state.extra['seed']}", on_check, skill=skill)
-    if st.session_state.extra["checked"]:
-        if st.session_state.extra["correct"]:
-            st.success("Correct.")
-        else:
-            st.error(f"Not quite. A correct form is {problem.answer_display}")
-    if st.button("New problem", key="extra-new", use_container_width=True):
+    def on_new() -> None:
         st.session_state.extra["seed"] = random.randint(1, 10**9)
         st.session_state.extra["problem"] = None
         st.session_state.extra["checked"] = False
         st.session_state.extra["correct"] = None
-        st.rerun()
+
+    problem_card(
+        problem,
+        f"extra-{st.session_state.extra['seed']}",
+        on_check,
+        skill=skill,
+        verdict=_answer_verdict(
+            st.session_state.extra["checked"],
+            st.session_state.extra["correct"],
+            f"Not quite. A correct form is {problem.answer_display}",
+        ),
+        on_new=on_new,
+    )
 
 
 def page_physics() -> None:
@@ -809,23 +1163,24 @@ def page_physics() -> None:
         st.session_state.physics["correct"] = ok
         record_attempt(st.session_state.progress, skill.id, ok, problem.id)
 
+    def on_new() -> None:
+        st.session_state.physics["seed"] = random.randint(1, 10**9)
+        st.session_state.physics["problem"] = None
+        st.session_state.physics["checked"] = False
+        st.session_state.physics["correct"] = None
+
     problem_card(
         problem,
         f"phy-{st.session_state.physics['seed']}",
         on_check,
         skill=skill,
+        verdict=_answer_verdict(
+            st.session_state.physics["checked"],
+            st.session_state.physics["correct"],
+            f"Not quite. A correct form is {problem.answer_display}",
+        ),
+        on_new=on_new,
     )
-    if st.session_state.physics["checked"]:
-        if st.session_state.physics["correct"]:
-            st.success("Correct.")
-        else:
-            st.error(f"Not quite. A correct form is {problem.answer_display}")
-    if st.button("New problem", key="phy-new", use_container_width=True):
-        st.session_state.physics["seed"] = random.randint(1, 10**9)
-        st.session_state.physics["problem"] = None
-        st.session_state.physics["checked"] = False
-        st.session_state.physics["correct"] = None
-        st.rerun()
 
 
 def page_flashcards() -> None:
